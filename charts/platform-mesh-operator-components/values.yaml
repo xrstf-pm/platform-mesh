@@ -7,7 +7,7 @@ ocm:
   componentName: platform-mesh
   repoName: platform-mesh
 componentVersion:
-  semver: 0.0.28
+  semver: 0.0.26
 iamWebhookCA: null
 services:
   istio-base:
@@ -275,11 +275,11 @@ services:
       - name: istio-istiod
         namespace: default
     values:
-#      service:
-#        name: keycloak
-#      externalSecrets:
-#        keycloakAdminRemoteRef: keycloak-admin
-#        postgresAdminRemoteRef: postgres-admin
+      #      service:
+      #        name: keycloak
+      #      externalSecrets:
+      #        keycloakAdminRemoteRef: keycloak-admin
+      #        postgresAdminRemoteRef: postgres-admin
       extraEnvVars:
         - name: JAVA_OPTS_APPEND
           value: |-
@@ -288,23 +288,23 @@ services:
           value: xforwarded
         - name: KC_HOSTNAME_STRICT
           value: "false"
-#      domain:
-#        pathPrefix: "/keycloak"
-#      istio:
-#        https:
-#          enabled: true
-#        virtualservice:
-#          hosts:
-#            - "{{ .Values.baseDomain }}"
-#      crossplane:
-#        clients:
-#          default:
-#            validRedirectUris:
-#              - "{{ .Values.protocol }}://{{ .Values.baseDomain }}:{{ .Values.port }}/callback*"
-#      keycloakConfig:
-#        url: "https://{{ .Values.baseDomain }}/keycloak"
-#        redirectUrls:
-#          - "{{ .Values.baseDomain }}:{{ .Values.port }}/callback*"
+          #      domain:
+          #        pathPrefix: "/keycloak"
+          #      istio:
+          #        https:
+          #          enabled: true
+          #        virtualservice:
+          #          hosts:
+          #            - "{{ .Values.baseDomain }}"
+          #      crossplane:
+          #        clients:
+          #          default:
+          #            validRedirectUris:
+          #              - "{{ .Values.protocol }}://{{ .Values.baseDomain }}:{{ .Values.port }}/callback*"
+          #      keycloakConfig:
+          #        url: "https://{{ .Values.baseDomain }}/keycloak"
+          #        redirectUrls:
+          #          - "{{ .Values.baseDomain }}:{{ .Values.port }}/callback*"
   kubernetes-graphql-gateway:
     enabled: true
     dependsOn:
@@ -351,19 +351,71 @@ services:
     dependsOn:
       - name: istio-istiod
         namespace: default
-#    values:
-#      databaseService: openfga-openfga-postgres
-#      trust:
-#        default:
-#          trustedIssuer: "https://{{ .Values.baseDomain }}:{{ .Values.port }}/keycloak/realms/default"
-#          jwksUrl: http://keycloak-headless.platform-mesh-system:8080/keycloak/realms/default/protocol/openid-connect/certs
-#          audience: default
-#      rbac:
-#        writePrincipals:
-#          - cluster.local/ns/platform-mesh-system/sa/iam-service
-#          - cluster.local/ns/platform-mesh-system/sa/iam-service-dataloader-sa
-#          - cluster.local/ns/platform-mesh-system/sa/security-operator
-#          - cluster.local/ns/platform-mesh-system/sa/account-operator
+    values:
+      migrate:
+        annotations:
+          sidecar.istio.io/inject: "false"
+      extraEnvVars:
+        - name: OPENFGA_EXPERIMENTALS
+          value: enable-list-users
+      log:
+        level: info
+      autoscaling:
+        enabled: false
+
+      image:
+        repository: "openfga/openfga"
+        tag: ""
+
+      replicaCount: 1
+
+      podAnnotations:
+        traffic.sidecar.istio.io/excludeInboundPorts: "2112"
+
+      checkQueryCache:
+        enabled: true
+        limit: 10000
+        ttl: 10s
+
+      datastore:
+        engine: postgres
+        uriSecret: "openfga-db"
+        deployOwnUriSecret: true    # if set to true, new secret will be deployed with the name of uriSecret.
+        maxOpenConns: 30
+        applyMigrations: true
+        migrationType: "initContainer"
+        migrations:
+          image:
+            repository: groundnuty/k8s-wait-for
+            pullPolicy: Always
+            tag: "v2.0"
+
+      postgresql:
+        ## @param postgresql.enabled enable the bitnami/postgresql subchart and deploy Postgres
+        enabled: true
+        nameOverride: openfga-postgres
+
+      telemetry:
+        trace:
+          enabled: true
+          otlp:
+            endpoint: observability-opentelemetry-collector.openmfp-observability.svc.cluster.local:4317
+            tls:
+              enabled: false
+          # sampleRatio:
+        #    values:
+        #      databaseService: openfga-openfga-postgres
+        #      trust:
+        #        default:
+        #          trustedIssuer: "https://{{ .Values.baseDomain }}:{{ .Values.port }}/keycloak/realms/default"
+        #          jwksUrl: http://keycloak-headless.platform-mesh-system:8080/keycloak/realms/default/protocol/openid-connect/certs
+        #          audience: default
+        #      rbac:
+        #        writePrincipals:
+        #          - cluster.local/ns/platform-mesh-system/sa/iam-service
+        #          - cluster.local/ns/platform-mesh-system/sa/iam-service-dataloader-sa
+        #          - cluster.local/ns/platform-mesh-system/sa/security-operator
+        #          - cluster.local/ns/platform-mesh-system/sa/account-operator
   marketplace-ui:
     enabled: false
     dependsOn:
