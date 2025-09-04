@@ -10,8 +10,11 @@ A Helm chart for Kubernetes
 | componentVersion.semver | string | `"0.0.66"` |  |
 | iamWebhookCA | string | `nil` |  |
 | ociPullSecret | string | `"ocm-oci-github-pull"` |  |
-| ocm.componentName | string | `"platform-mesh"` |  |
-| ocm.repoName | string | `"platform-mesh"` |  |
+| ocm.component.create | bool | `true` |  |
+| ocm.component.name | string | `"platform-mesh"` |  |
+| ocm.referencePath | list | `[]` |  |
+| ocm.repo.create | bool | `true` |  |
+| ocm.repo.name | string | `"platform-mesh"` |  |
 | port | int | `443` |  |
 | protocol | string | `"https"` |  |
 | services.account-operator.dependsOn[0].name | string | `"istio-istiod"` |  |
@@ -28,7 +31,7 @@ A Helm chart for Kubernetes
 | services.crossplane.enabled | bool | `true` |  |
 | services.crossplane.helmRepo | bool | `true` |  |
 | services.crossplane.targetNamespace | string | `"crossplane-system"` |  |
-| services.crossplane.values.provider.packages[0] | string | `"xpkg.upbound.io/crossplane-contrib/provider-keycloak:v1.8.0"` |  |
+| services.crossplane.values.provider.packages[0] | string | `"xpkg.upbound.io/crossplane-contrib/provider-keycloak:v1.9.2"` |  |
 | services.etcd-druid.enabled | bool | `true` |  |
 | services.etcd-druid.gitRepo | bool | `true` |  |
 | services.etcd-druid.path | string | `"charts"` |  |
