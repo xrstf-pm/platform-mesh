@@ -14,7 +14,7 @@ ocm:
     create: true
     name: platform-mesh
 componentVersion:
-  semver: 0.0.201
+  semver: 0.0.296
 iamWebhookCA: null
 services:
   istio-base:
@@ -416,6 +416,9 @@ services:
         ## @param postgresql.enabled enable the bitnami/postgresql subchart and deploy Postgres
         enabled: true
         nameOverride: postgres
+        image:
+          registry: ghcr.io/platform-mesh
+          repository: images/postgresql
       telemetry:
         trace:
           enabled: true
