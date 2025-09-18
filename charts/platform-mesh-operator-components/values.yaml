@@ -14,7 +14,7 @@ ocm:
     create: true
     name: platform-mesh
 componentVersion:
-  semver: 0.0.183
+  semver: 0.0.201
 iamWebhookCA: null
 services:
   istio-base:
@@ -284,6 +284,14 @@ services:
       - name: istio-istiod
         namespace: default
     values:
+      global:
+        imagePullSecrets:
+          - name: github
+        security:
+          allowInsecureImages: true
+      image:
+        registry: ghcr.io/platform-mesh
+        repository: images/keycloak
       auth:
         # -- keycloak admin user
         adminUser: keycloak-admin
@@ -305,6 +313,9 @@ services:
           value: "false"
       # -- configuration for the postgresql sub-chart
       postgresql:
+        image:
+          registry: ghcr.io/platform-mesh
+          repository: images/postgresql
         primary:
           # -- primary postgresql resources preset
           resourcesPreset: none
