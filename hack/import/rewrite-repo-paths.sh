@@ -257,7 +257,7 @@ fi
 if [[ -n "$REWRITE_ISSUES" ]]; then
     echo ""
     echo "Rewriting issue references to $REWRITE_ISSUES..."
-    FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter \
+    FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --tag-name-filter cat --msg-filter \
         "sed -E 's@(^|[^a-zA-Z0-9])#([0-9]+)@\1$REWRITE_ISSUES#\2@g'" \
         -- --all
     rm -rf .git/refs/original/
@@ -271,7 +271,7 @@ echo "Verifying result..."
 echo "Commits in rewritten history: $COMMIT_COUNT"
 echo ""
 echo "Files in rewritten repo:"
-git ls-files | head -20
+git ls-files | sed -n '1,20p'
 FILE_COUNT=$(git ls-files | wc -l)
 if [[ $FILE_COUNT -gt 20 ]]; then
     echo "... and $((FILE_COUNT - 20)) more files"
