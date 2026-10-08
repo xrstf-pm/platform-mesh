@@ -35,6 +35,10 @@ TEMP_DIR="$SCRIPT_DIR/temp"
 REWRITTEN="$TEMP_DIR/helm-charts-rewritten"
 BASE_FILE="$REPO_ROOT/.git/HELM_CHARTS_IMPORT_BASE"
 MAPPING="$SCRIPT_DIR/mappings/helm-charts.txt"
+# Commits by these authors are squashed into the next human commit. Covers
+# renovate[bot], the various spellings of the Platform Mesh Publisher app and
+# any other GitHub App. Set to "" to keep everything.
+DROP_AUTHORS='\[bot\]|Mesh Publisher'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -91,10 +95,17 @@ if [[ ! -d "$SOURCE" ]]; then
 fi
 
 echo "Rewriting history of $SOURCE..."
-"$SCRIPT_DIR/rewrite-repo-paths.sh" \
-  --tag-prefix 'helm-charts/' \
-  --rewrite-issues 'platform-mesh/helm-charts' \
-  "$SOURCE" "$MAPPING" "$REWRITTEN"
+REWRITE_ARGS=(--tag-prefix 'helm-charts/' --rewrite-issues 'platform-mesh/helm-charts')
+if [[ -n "$DROP_AUTHORS" ]]; then
+  REWRITE_ARGS+=(--drop-author-regex "$DROP_AUTHORS")
+fi
+"$SCRIPT_DIR/rewrite-repo-paths.sh" "${REWRITE_ARGS[@]}" "$SOURCE" "$MAPPING" "$REWRITTEN"
+
+# Verify that no content was lost: every file in the original main must exist
+# with identical content at its mapped location in the rewritten main (and
+# nothing else may exist there).
+echo "Verifying rewritten tree against the original..."
+"$SCRIPT_DIR/verify-rewrite.sh" "$SOURCE" "$REWRITTEN" "$MAPPING"
 
 if [[ "$MERGE" != "true" ]]; then
   echo "Done (no merge). Rewritten repository: $REWRITTEN"

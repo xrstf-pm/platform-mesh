@@ -11,6 +11,9 @@
 # Options:
 #   --drop-message-regex <regex>   Drop commits whose message matches this regex
 #   --drop-author-regex <regex>    Drop commits whose author matches this regex
+#                                  Dropped commits are squashed into the next kept commit
+#                                  on the same first-parent line, so no changes are lost.
+#                                  Branch tips and tag targets are never dropped.
 #   --drop-tags                    Remove all tags from the rewritten history
 #   --tag-prefix <prefix>          Prefix all tags (e.g. 'helm-charts/' turns 0.5.2 into helm-charts/0.5.2)
 #   --rewrite-issues <org/repo>    Rewrite issue refs (#123 -> org/repo#123)
@@ -130,7 +133,7 @@ fi
 # Clean up and create fresh clone
 rm -rf "$OUTPUT_DIR"
 echo "Cloning $SOURCE_REPO to $OUTPUT_DIR..."
-git clone --no-local "$SOURCE_REPO" "$OUTPUT_DIR"
+git clone --no-local --single-branch "$SOURCE_REPO" "$OUTPUT_DIR"
 
 cd "$OUTPUT_DIR"
 
@@ -188,7 +191,12 @@ return None
 CALLBACK_FILE=""
 if [[ -n "$DROP_MESSAGE_REGEX" || -n "$DROP_AUTHOR_REGEX" ]]; then
     CALLBACK_FILE=$(mktemp --suffix=.py)
-    trap "rm -f '$CALLBACK_FILE'" EXIT
+    trap 'rm -f "$CALLBACK_FILE"' EXIT
+
+    # Commits that are branch tips or tag targets are never dropped: dropping
+    # them would move the ref to the parent and lose the tip's changes.
+    PROTECTED_IDS=$(git for-each-ref --format='%(objectname) %(*objectname)' refs/heads refs/tags \
+        | tr ' ' '\n' | grep -v '^$' | sort -u | sed "s/.*/    b'&',/")
 
     cat > "$CALLBACK_FILE" << PYTHON_EOF
 import re
@@ -197,27 +205,77 @@ import re
 message_pattern = re.compile(rb'''$DROP_MESSAGE_REGEX''') if '''$DROP_MESSAGE_REGEX''' else None
 author_pattern = re.compile(rb'''$DROP_AUTHOR_REGEX''') if '''$DROP_AUTHOR_REGEX''' else None
 
+protected = {
+$PROTECTED_IDS
+}
+
+# Dropping a commit with commit.skip() only removes it from the output stream;
+# fast-export lists per commit only the files that commit changed, so a
+# skipped commit's changes would silently vanish from history until some
+# later commit happens to touch the same file. To squash instead of lose, we
+# carry the skipped commit's file changes forward (keyed by its original mark)
+# and fold them into the next kept commit whose original *first* parent it is.
+# Merge commits take their tree from the first parent, so only the first-parent
+# line matters; changes reachable via a second parent are already part of the
+# merge commit's own diff.
+#
+# pending:  original mark -> list of FileChange carried forward
+# squashed: original mark -> number of commits squashed into that list
+pending = {}
+squashed = {}
 dropped_count = 0
+
+def _inherited(metadata):
+    orig_parents = metadata.get('orig_parents') or []
+    first = orig_parents[0] if orig_parents else None
+    if isinstance(first, int) and first in pending:
+        return pending[first], squashed[first]
+    return [], 0
+
+def _merge_changes(inherited, own):
+    # Later entries win; the commit's own changes come last.
+    by_name = {}
+    for fc in list(inherited) + list(own):
+        by_name[fc.filename] = fc
+    return list(by_name.values())
 
 def commit_callback(commit, metadata):
     global dropped_count
 
-    dominated = False
+    inherited, inherited_count = _inherited(metadata)
 
-    # Check message
+    drop = False
     if message_pattern and message_pattern.search(commit.message):
-        dominated = True
-
-    # Check author (name and email)
+        drop = True
     if author_pattern:
         author_info = commit.author_name + b' <' + commit.author_email + b'>'
         if author_pattern.search(author_info):
-            dominated = True
+            drop = True
+    if commit.original_id in protected or not commit.parents:
+        drop = False
 
-    if dominated:
+    if drop:
         dropped_count += 1
-        # Skip this commit entirely - its changes will be folded into the next commit
-        commit.skip()
+        pending[commit.old_id] = _merge_changes(inherited, commit.file_changes)
+        squashed[commit.old_id] = inherited_count + 1
+        # Remap this commit's id to its (already translated) first parent so
+        # children stay attached. A bare skip() would map it to None.
+        commit.skip(new_id=commit.first_parent())
+        return
+
+    if not commit.file_changes:
+        # Nothing of ours in this commit (filter-repo will most likely prune
+        # it as empty); pass the carried changes on to its first-parent child.
+        if inherited:
+            pending[commit.old_id] = inherited
+            squashed[commit.old_id] = inherited_count
+        return
+
+    if inherited:
+        commit.file_changes = _merge_changes(inherited, commit.file_changes)
+        commit.message = commit.message.rstrip(b'\n') + (
+            b'\n\nIncludes the changes of %d automated commit(s) squashed into this one\n'
+            b'during the monorepo import.\n' % inherited_count)
 PYTHON_EOF
 
     echo ""
