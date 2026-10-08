@@ -16,24 +16,24 @@ REWRITTEN="$(cd "$2" && pwd)"
 MAPPING="$(realpath "$3")"
 TAG_PREFIX="${TAG_PREFIX:-helm-charts/}"
 
-# Apply the mapping (same semantics as the filename callback: longest match
+# Applies the mapping (same semantics as the filename callback: longest match
 # wins, directory entries are prefixes, others exact) to stdin lines of the
 # form "<blob> <path>", printing "<blob> <newpath>" for kept files.
-map_paths() {
-  python3 - "$MAPPING" <<'EOF'
+# shellcheck disable=SC2016
+MAP_PY='
 import sys
 mappings = []
 for line in open(sys.argv[1]):
     line = line.strip()
-    if not line or line.startswith('#'):
+    if not line or line.startswith("#"):
         continue
     parts = line.split()
-    mappings.append((parts[0], parts[1] if len(parts) > 1 else ''))
+    mappings.append((parts[0], parts[1] if len(parts) > 1 else ""))
 mappings.sort(key=lambda m: len(m[0]), reverse=True)
 for line in sys.stdin:
-    blob, path = line.rstrip('\n').split(' ', 1)
+    blob, path = line.rstrip("\n").split(" ", 1)
     for old, new in mappings:
-        if old.endswith('/'):
+        if old.endswith("/"):
             if path.startswith(old):
                 if new:
                     print(blob, new + path[len(old):])
@@ -42,7 +42,9 @@ for line in sys.stdin:
             if new:
                 print(blob, new)
             break
-EOF
+'
+map_paths() {
+  python3 -c "$MAP_PY" "$MAPPING"
 }
 
 list_tree() { # <repo> <ref>
