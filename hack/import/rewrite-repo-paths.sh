@@ -142,7 +142,7 @@ cd "$OUTPUT_DIR"
 # does not turn them into local branches.
 DEFAULT_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD | sed 's#^origin/##')"
 git for-each-ref --format='%(refname)' refs/remotes/origin \
-    | grep -v -e "^refs/remotes/origin/${DEFAULT_BRANCH}\$" -e '^refs/remotes/origin/HEAD$' \
+    | { grep -v -e "^refs/remotes/origin/${DEFAULT_BRANCH}\$" -e '^refs/remotes/origin/HEAD$' || true; } \
     | xargs -r -n1 git update-ref -d
 
 # Build the filename callback from the mapping file.
