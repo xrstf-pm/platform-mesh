@@ -1,0 +1,35 @@
+# Mapping for importing platform-mesh/helm-charts into the monorepo.
+# Format: <old-path-prefix> <new-path-prefix>
+# Empty new-path means the files will be deleted from history.
+# Edit and re-run hack/import/import-helm-charts.sh --reset to try again.
+
+# The actual content
+charts/                   charts/
+.ocm/                     ocm/
+local-setup/              local-setup/
+production-setup/         production-setup/
+docs/                     docs/deployment/
+docs-templates/           charts/.docs-templates/
+rgd/                      contrib/rgd/
+
+# Scripts
+hack/ocm/                 hack/release/
+hack/                     hack/charts/
+.github/scripts/          hack/release/
+
+# Old workflows: kept in history for reference, but parked in a subdirectory so
+# GitHub does not pick them up. Deleted in a later step of the rework.
+.github/workflows/        .github/workflows-helm-charts/
+
+# Root files that collide with the monorepo's own. Parked for manual merging
+# (Taskfile, renovate config) or as the charts/ directory's README.
+README.md                 charts/README.md
+AGENTS.md                 hack/import/parked/helm-charts-AGENTS.md
+Taskfile.yaml             hack/import/parked/helm-charts-Taskfile.yaml
+renovate.json             hack/import/parked/helm-charts-renovate.json
+.gitignore                hack/import/parked/helm-charts.gitignore
+CODEOWNERS                hack/import/parked/helm-charts-CODEOWNERS
+
+# Dropped: identical to the monorepo's or superseded by it
+CONTRIBUTING.md
+LICENSE
