@@ -238,12 +238,36 @@ st = g['squash_state']
 # filter-repo passes the metadata dict as a second argument it unhelpfully
 # names _do_not_use_this_var; it is the only way to get the *original* parent
 # marks (commit.parents is already remapped past skipped commits).
-orig_parents = _do_not_use_this_var.get('orig_parents') or []
+meta = _do_not_use_this_var
+orig_parents = meta.get('orig_parents') or []
 first = orig_parents[0] if orig_parents else None
 if isinstance(first, int) and first in st['pending']:
     inherited, inherited_count = st['pending'][first], st['squashed'][first]
 else:
     inherited, inherited_count = {}, 0
+
+# Degenerate merges. filter-repo assumes skipped commits are empty. When a
+# merge's first parent was skipped and its replacement is now an ancestor of
+# the second parent, filter-repo has already recomputed commit.file_changes
+# relative to the *second* parent (expecting the result to be empty and the
+# merge to be pruned). With squashed changes it is not empty, and fast-import
+# would apply those changes on top of the first parent, losing the second
+# parent's content. Turn the commit into a plain child of the second parent
+# instead: the recomputed diff is exactly right for that, and already
+# contains anything we would have inherited.
+if len(commit.parents) == 2 and len(orig_parents) == 2:
+    p0, p1 = commit.parents
+    new_graph, orig_graph = meta['ancestry_graph'], meta['original_ancestry_graph']
+    if p0 == p1:
+        commit.parents = [p0]
+    elif new_graph.is_ancestor(p0, p1) and not orig_graph.is_ancestor(orig_parents[0], orig_parents[1]):
+        commit.parents = [p1]
+        inherited, inherited_count = {}, 0
+    elif new_graph.is_ancestor(p1, p0) and not orig_graph.is_ancestor(orig_parents[1], orig_parents[0]):
+        # Second parent (e.g. an all-bot bump branch) collapsed into an
+        # ancestor of the first; changes are relative to the first parent as
+        # usual, the merge is just no longer a merge.
+        commit.parents = [p0]
 
 merged = lambda inh, own: {**inh, **{fc.filename: fc for fc in own}}
 
