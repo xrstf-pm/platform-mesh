@@ -1,0 +1,48 @@
+# platform-mesh-operator
+
+A Helm chart to automate bootstrapping of new environment
+
+![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
+## Values
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| crds.enabled | bool | `true` |  |
+| deployment.replicas | int | `1` |  |
+| extraArgs[0] | string | `"--subroutines-feature-toggles-enabled=true"` |  |
+| idp.registrationAllowed | bool | `false` |  |
+| image.digest | string | `""` | The image digest (when set, overrides tag: registry/repository@digest) |
+| image.registry | string | `"ghcr.io"` | The image registry |
+| image.repository | string | `"platform-mesh/platform-mesh/platform-mesh-operator"` | The image repository path (without registry) |
+| istio.enabled | bool | `false` |  |
+| jwt.userIdClaim | string | `"email"` |  |
+| log.level | string | `"info"` | log level. Permissible values: debug, info, warn, error |
+| operator.leaderElect | bool | `true` |  |
+| remoteInfra.enabled | bool | `false` | Enables reconciliation of PlatformMesh resources on remote clusters |
+| remoteInfra.secretKey | string | `"kubeconfig"` |  |
+| remoteInfra.secretName | string | `"platform-mesh-kubeconfig"` | Name of the secret containing the kubeconfig for remote cluster access where the PlatformMesh resources will be deployed |
+| remoteRuntime.enabled | bool | `false` | Enables deployment to remote clusters. Set to true if the operator is not deployed on the same cluster where the Infra artefacts will be created. |
+| remoteRuntime.infra.secretKey | string | `"kubeconfig"` |  |
+| remoteRuntime.infra.secretName | string | `"platform-mesh-secret"` | Name of the secret containing Runtime cluster kubeconfig |
+| remoteRuntime.secretKey | string | `"kubeconfig"` |  |
+| remoteRuntime.secretName | string | `"platform-mesh-secret"` | Name of the secret containing the kubeconfig for the cluster where the created Infra artefacts will be created. NOTE: target deployment will alway be same as the cluster where the Platform Mesh resource lives. |
+| tracing.collector.endpoint | string | `"observability-opentelemetry-collector.observability.svc.cluster.local:4317"` |  |
+| tracing.enabled | bool | `false` |  |
+
+## Overriding Values
+
+The values in the `defaults:` section can be reused from other charts by using the lookup function "common.getKeyValue". It implements lookup on three levels:
+
+1. Looks for `keyOverride` in the chart's values.yaml
+2. Looks for `global.key` in the chart's or parent chart's values.yaml
+3. Uses the `key` in the chart's values.yaml
+4. Uses the `common.defaults.key` value from the table below.
+
+1 has precedence over 2 over 3 over 4 respectively. This approach allows for individual charts to have minimal configuration, while still being able to override parameters locally.
+
+Example
+```
+1) .Values.deployment.resources.limits.memoryOverride = 4096MB
+2) .Values.global.deployment.resources.limits.memory = 2048MB
+3) .Values.deployment.resources.limits.memory = 1024MB
+4) .Values.common.defaults.deployment.resources.limits.memory = default 512MB
+```

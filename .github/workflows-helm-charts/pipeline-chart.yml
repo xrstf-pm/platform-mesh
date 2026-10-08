@@ -1,0 +1,198 @@
+name: pipeline-chart
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      chartFolder:
+        required: false
+        type: string
+        default: 'charts'
+      chartName:
+        required: true
+        type: string
+      release_branch:
+        required: false
+        type: string
+        default: 'main'
+      pushTags:
+        required: false
+        type: boolean
+        default: false
+      disableOCM:
+        required: false
+        type: boolean
+        default: false
+      componentConstructorFile:
+        required: false
+        type: string
+        default: .ocm/component-constructor.yaml
+      chartOnly:
+        description: "If true, builds chart-only component and triggers service component pipeline"
+        required: false
+        type: boolean
+        default: false
+      imageComponentName:
+        description: "Image component name suffix for service component (defaults to chart name)"
+        required: false
+        type: string
+        default: ''
+      serviceComponentConstructorFile:
+        description: "Custom service component constructor file in the ocm repo"
+        required: false
+        type: string
+        default: ''
+    outputs:
+      version:
+        description: "The created Version"
+        value: ${{ jobs.release.outputs.version }}
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Immutability guard: refuse to publish if the
+  # chart version or the OCM component version
+  # already exists in the registry. Force a
+  # Chart.yaml version bump for every change.
+  # ──────────────────────────────────────────────
+  verify-version:
+    if: ${{ !inputs.disableOCM && github.ref == format('refs/heads/{0}', inputs.release_branch) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Read chart version
+        id: read
+        run: |
+          set -euo pipefail
+          VERSION=$(yq '.version' "${{ inputs.chartFolder }}/${{ inputs.chartName }}/Chart.yaml")
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "::error::Could not read .version from ${{ inputs.chartFolder }}/${{ inputs.chartName }}/Chart.yaml"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Chart version: $VERSION"
+      - name: setup OCM CLI
+        run: |
+          REPO="open-component-model/open-component-model"
+          # renovate: datasource=github-releases depName=open-component-model/open-component-model
+          version="v0.13.0"
+          echo "Installing ocm-cli version $version from $REPO"
+          curl -LsS -o ocm "https://github.com/$REPO/releases/download/${version}/ocm-linux-amd64"
+          chmod a+x ocm
+      - name: Write OCM credentials
+        # Authenticate the lookup so ghcr.io returns a clean "not found" for a
+        # component that has never been published. Anonymously, ghcr.io answers
+        # a request for a nonexistent repo with "403 denied" (it does not leak
+        # existence), which the fail-closed guard below cannot tell apart from a
+        # real permission error. With a token the response becomes a definitive
+        # "not found", which the guard treats as "component is new".
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cat <<EOF > "$HOME/.ocmconfig"
+          type: generic.config.ocm.software/v1
+          configurations:
+            - type: credentials.config.ocm.software
+              consumers:
+                - identity:
+                    type: OCIRegistry
+                    scheme: https
+                    hostname: ghcr.io
+                    path: platform-mesh
+                  credentials:
+                    - type: Credentials
+                      properties:
+                        username: github
+                        password: ${GITHUB_TOKEN}
+          EOF
+      - name: Verify OCM component version does not exist
+        env:
+          VERSION: ${{ steps.read.outputs.version }}
+          CHART_NAME: ${{ inputs.chartName }}
+          CHART_ONLY: ${{ inputs.chartOnly }}
+        run: |
+          set -euo pipefail
+
+          if [ "$CHART_ONLY" = "true" ]; then
+            COMPONENT_NAME="github.com/platform-mesh/helm-charts/${CHART_NAME}"
+          else
+            COMPONENT_NAME="github.com/platform-mesh/${CHART_NAME}"
+          fi
+
+          echo "Checking OCM component ${COMPONENT_NAME}:${VERSION} at ghcr.io/platform-mesh"
+
+          # Fail-closed: a successful lookup means the component already exists
+          # and we must not overwrite it. Any other error (auth, network,
+          # registry) must abort the pipeline rather than fall through to
+          # release; only a definitive "not found" is a pass.
+          # Note: ghcr.io returns "403 denied: requested access" (not 404) for
+          # packages that have never been published, even with a valid token.
+          # A 401 would indicate a broken token; 403 means the package is new.
+          set +e
+          out=$(./ocm get cv \
+            "ghcr.io/platform-mesh//${COMPONENT_NAME}:${VERSION}" 2>&1)
+          rc=$?
+          set -e
+
+          if [ "$rc" -eq 0 ]; then
+            echo "$out"
+            echo "::error::OCM component ${COMPONENT_NAME}:${VERSION} already exists at ghcr.io/platform-mesh. We should not overwrite components for the same version. Bump .version in ${{ inputs.chartFolder }}/${CHART_NAME}/Chart.yaml before merging."
+            exit 1
+          fi
+
+          if ! grep -qiE 'not found|does not exist|no such|component version .* not found|denied: requested access' <<<"$out"; then
+            echo "$out"
+            echo "::error::OCM lookup for ${COMPONENT_NAME}:${VERSION} failed (rc=${rc}). Refusing to proceed without a definitive answer; see output above."
+            exit 1
+          fi
+
+          echo "OK: OCM component ${COMPONENT_NAME}:${VERSION} is new."
+
+  # ──────────────────────────────────────────────
+  # Release jobs (main branch only)
+  # ──────────────────────────────────────────────
+  release:
+    if: ${{ always() && github.ref == format('refs/heads/{0}', inputs.release_branch) && (needs.verify-version.result == 'success' || needs.verify-version.result == 'skipped') }}
+    needs: [verify-version]
+    uses: platform-mesh/.github/.github/workflows/job-release-chart.yml@068efd5c6c7a6d0c4b28f5887de7ca156cb5f7b8
+    secrets: inherit
+    permissions:
+      contents: write
+      packages: write
+    with:
+      updateVersion: false
+      pushTags: ${{ inputs.pushTags }}
+      updateImageTag: false
+      chartFolder: ${{ inputs.chartFolder }}/${{ inputs.chartName }}
+      release_branch: ${{ inputs.release_branch }}
+
+  ocm:
+    if: ${{ !inputs.disableOCM && github.ref == format('refs/heads/{0}', inputs.release_branch) }}
+    needs: [verify-version, release]
+    uses: ./.github/workflows/job-ocm.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write
+    with:
+      chartPath: ${{ inputs.chartFolder }}/${{ inputs.chartName }}
+      componentName: ${{ inputs.chartOnly && format('github.com/platform-mesh/helm-charts/{0}', inputs.chartName) || format('github.com/platform-mesh/{0}', inputs.chartName) }}
+      componentConstructorFile: ${{ inputs.componentConstructorFile }}
+      chartOnly: ${{ inputs.chartOnly }}
+      imageComponentName: ${{ inputs.imageComponentName }}
+      serviceComponentConstructorFile: ${{ inputs.serviceComponentConstructorFile }}
+
+  pm-ocm:
+    if: ${{ !inputs.chartOnly && !inputs.disableOCM && github.ref == format('refs/heads/{0}', inputs.release_branch) }}
+    needs: [ocm]
+    uses: ./.github/workflows/ocm-aggregator.yaml
+    secrets: inherit
+    permissions:
+      contents: read
+      packages: write

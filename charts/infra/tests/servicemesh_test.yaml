@@ -1,0 +1,91 @@
+suite: Test service-mesh manifests
+templates:
+  - keycloak/httproute.yaml
+  - keycloak/db-secret.yaml
+  - keycloak/admin-secret.yaml
+  - keycloak/keycloak.yaml
+  - gatewayapi/gateway.yaml
+release:
+  name: infra
+  namespace: platform-mesh-system
+tests:
+- it: test HTTPRoutes
+  templates:
+  - keycloak/httproute.yaml
+  set:
+    gatewayApi:
+      enabled: true
+    cors:
+      enabled: true
+  asserts:
+  - matchSnapshot: {}
+- it: configure Gateway infrastructure
+  templates:
+  - gatewayapi/gateway.yaml
+  set:
+    gatewayApi:
+      enabled: true
+      infrastructure:
+        annotations:
+          dns.gardener.cloud/class: garden
+  asserts:
+  - equal:
+      path: spec.infrastructure.annotations
+      value:
+        dns.gardener.cloud/class: garden
+- it: keycloak operator disabled by default
+  templates:
+  - keycloak/db-secret.yaml
+  - keycloak/admin-secret.yaml
+  - keycloak/keycloak.yaml
+  asserts:
+  - hasDocuments:
+      count: 0
+- it: keycloak operator enabled renders all resources
+  templates:
+  - keycloak/db-secret.yaml
+  - keycloak/admin-secret.yaml
+  - keycloak/keycloak.yaml
+  set:
+    keycloak:
+      operator:
+        enabled: true
+        image:
+          registry: ghcr.io
+          repository: platform-mesh/custom-images/keycloak
+          tag: "v26.7.2"
+          digest: ""
+  asserts:
+  - matchSnapshot: {}
+- it: keycloak pod gets hostAliases when enabled
+  templates:
+  - keycloak/keycloak.yaml
+  set:
+    keycloak:
+      operator:
+        enabled: true
+    hostAliases:
+      enabled: true
+      entries:
+      - ip: "10.96.188.4"
+        hostnames:
+        - "portal.localhost"
+  asserts:
+  - equal:
+      path: spec.unsupported.podTemplate.spec.hostAliases[0].ip
+      value: "10.96.188.4"
+  - contains:
+      path: spec.unsupported.podTemplate.spec.hostAliases[0].hostnames
+      content: portal.localhost
+- it: keycloak truststores configured when caSecret set
+  templates:
+  - keycloak/keycloak.yaml
+  set:
+    keycloak:
+      operator:
+        enabled: true
+        caSecret: domain-certificate-ca
+  asserts:
+  - equal:
+      path: spec.truststores.domain-ca.secret.name
+      value: domain-certificate-ca

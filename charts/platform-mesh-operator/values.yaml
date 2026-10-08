@@ -1,0 +1,56 @@
+crds:
+  enabled: true
+
+deployment:
+  replicas: 1
+
+log:
+  # -- log level. Permissible values: debug, info, warn, error
+  level: info
+
+operator:
+  leaderElect: true
+
+# JWT configuration
+jwt:
+  userIdClaim: "email"
+
+image:
+  # -- The image registry
+  registry: ghcr.io
+  # -- The image repository path (without registry)
+  repository: platform-mesh/platform-mesh/platform-mesh-operator
+  # -- The image digest (when set, overrides tag: registry/repository@digest)
+  digest: ""
+
+tracing:
+  enabled: false
+  collector:
+    endpoint: observability-opentelemetry-collector.observability.svc.cluster.local:4317
+
+extraArgs:
+  - --subroutines-feature-toggles-enabled=true
+
+idp:
+  registrationAllowed: false
+
+istio:
+  enabled: false
+
+remoteInfra:
+  # -- Enables reconciliation of PlatformMesh resources on remote clusters
+  enabled: false
+  # -- Name of the secret containing the kubeconfig for remote cluster access where the PlatformMesh resources will be deployed
+  secretName: "platform-mesh-kubeconfig"
+  secretKey: "kubeconfig"
+
+remoteRuntime:
+  # -- Enables deployment to remote clusters. Set to true if the operator is not deployed on the same cluster where the Infra artefacts will be created.
+  enabled: false
+  # -- Name of the secret containing the kubeconfig for the cluster where the created Infra artefacts will be created. NOTE: target deployment will alway be same as the cluster where the Platform Mesh resource lives.
+  secretName: "platform-mesh-secret"
+  secretKey: "kubeconfig"
+  infra:
+    # -- Name of the secret containing Runtime cluster kubeconfig
+    secretName: "platform-mesh-secret"
+    secretKey: "kubeconfig"

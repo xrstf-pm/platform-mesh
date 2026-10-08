@@ -1,0 +1,29 @@
+name: Build platform-mesh-operator-crds Workflow
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/platform-mesh-operator-crds/**'
+      - '.github/workflows/platform-mesh-operator-crds.yaml'
+      - '.ocm/component-constructor-chart-only.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    concurrency:
+      group: platform-mesh-operator-crds-${{ github.ref }}
+      cancel-in-progress: true
+    uses: ./.github/workflows/pipeline-chart.yml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      chartFolder: charts
+      chartName: platform-mesh-operator-crds
+      componentConstructorFile: .ocm/component-constructor-chart-only.yaml
+      chartOnly: true
+    secrets: inherit
+

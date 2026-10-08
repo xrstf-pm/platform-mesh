@@ -1,0 +1,28 @@
+name: Build portal Workflow
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/portal/**'
+      - '.github/workflows/portal.yaml'
+      - '.ocm/component-constructor-chart-only.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    concurrency:
+      group: portal-${{ github.ref }}
+      cancel-in-progress: true
+    uses: ./.github/workflows/pipeline-chart.yml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      chartFolder: charts
+      chartName: portal
+      componentConstructorFile: .ocm/component-constructor-chart-only.yaml
+      chartOnly: true
+    secrets: inherit

@@ -1,0 +1,16 @@
+{{- if .Values.gatewayApi.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gatewayApi.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  gatewayClassName: {{ .Values.gatewayApi.gatewayClassName }}
+  listeners:
+    {{- .Values.gatewayApi.listeners | default list | toYaml | nindent 4 }}
+    {{- .Values.gatewayApi.listenersExtra | default list | toYaml | nindent 4 }}
+{{- with .Values.gatewayApi.infrastructure }}
+  infrastructure:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+{{- end }}
