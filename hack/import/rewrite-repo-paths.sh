@@ -235,7 +235,10 @@ $PROTECTED_IDS
     }
 st = g['squash_state']
 
-orig_parents = metadata.get('orig_parents') or []
+# filter-repo passes the metadata dict as a second argument it unhelpfully
+# names _do_not_use_this_var; it is the only way to get the *original* parent
+# marks (commit.parents is already remapped past skipped commits).
+orig_parents = _do_not_use_this_var.get('orig_parents') or []
 first = orig_parents[0] if orig_parents else None
 if isinstance(first, int) and first in st['pending']:
     inherited, inherited_count = st['pending'][first], st['squashed'][first]
