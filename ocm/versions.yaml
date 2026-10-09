@@ -12,16 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Versions of third-party software shipped with Platform Mesh.
+# Versions of THIRD-PARTY software shipped with Platform Mesh (kcp, OpenFGA,
+# Traefik, cert-manager, ...). Nothing in here is built from this repository.
 #
-# This is the single place these are pinned. The OCM component constructor
-# (ocm/component-constructor*.yaml) references them as ${VARIABLE}; the release
-# workflow and local-setup load them with hack/release/export-versions.sh.
-# Renovate updates the upstream versions (see the comments above each entry).
+# Platform Mesh's own components are NOT listed here and never need to be:
+# their charts are versioned by charts/<name>/Chart.yaml, their images by the
+# appVersion in the same file. A Platform Mesh release (tag vX.Y.Z) uses
+# whatever those files say at the tagged commit.
 #
-# Versions of Platform Mesh's own components are NOT here: images are pinned
-# by the appVersion in each chart's Chart.yaml, charts by their Chart.yaml
-# version.
+# This is the single place the third-party versions are pinned. The OCM
+# component constructor (ocm/component-constructor*.yaml) references them as
+# ${VARIABLE}; the release workflow and local-setup load them with
+# hack/release/export-versions.sh. Renovate updates the upstream versions (see
+# the comments above each entry).
 #
 # Two kinds of entries:
 #
