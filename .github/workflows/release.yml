@@ -1,0 +1,145 @@
+# Copyright The Platform Mesh Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: release
+
+# Releases Platform Mesh. Triggered by pushing a tag `vX.Y.Z` (final) or
+# `vX.Y.Z-rc.N` (release candidate). The tagged commit defines the release:
+#
+#   charts/*/Chart.yaml      which chart versions ship, and through their
+#                            appVersion which component images
+#   ocm/versions.yaml        which third-party versions
+#
+# hack/release/build-aggregate.sh turns that into the OCM component graph:
+# charts not yet in the registry are packaged and pushed, their OCM components
+# and the third-party wrapper components are created, and the aggregate
+# github.com/platform-mesh/platform-mesh:<X.Y.Z> is published and signed.
+# Component images are NOT built here; they must have been released before
+# via their `<component>/vX.Y.Z` tags (component-release.yml). The build fails
+# with a list of missing ones otherwise.
+#
+# Finally a GitHub release is created with generated notes.
+#
+# Prerelease builds from main use prerelease.yml, which runs the same script.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  # renovate: datasource=github-releases depName=open-component-model/open-component-model
+  OCM_CLI_VERSION: v0.13.0
+  # renovate: datasource=github-releases depName=helm/helm
+  HELM_VERSION: v4.2.3
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write # create the GitHub release
+      packages: write # push charts and OCM components
+    env:
+      OCM_REPO: ghcr.io/${{ github.repository_owner }}
+      # The signature name must equal the CN of the signing certificate.
+      SIGNATURE: ${{ vars.OCM_SIGNATURE_NAME || 'platform-mesh.platform-mesh' }}
+      # Test setups only: copy referenced image components that were built
+      # elsewhere from this OCM repository. Unset in the platform-mesh org.
+      MIRROR_FROM: ${{ vars.OCM_MIRROR_FROM }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # release notes compare against the previous tag
+
+      - name: Resolve version
+        id: v
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          prerelease=false
+          [[ "$version" == *-* ]] && prerelease=true
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "Releasing Platform Mesh $version (prerelease: $prerelease)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          curl -LsSf -o /usr/local/bin/ocm \
+            "https://github.com/open-component-model/open-component-model/releases/download/${OCM_CLI_VERSION}/ocm-linux-amd64"
+          chmod +x /usr/local/bin/ocm
+          curl -LsSf "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
+          pip3 install --quiet pyyaml
+          ocm version; helm version --short; yq --version; jq --version
+
+      - name: Registry credentials
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCM_SIGNING_PRIVATE_KEY: ${{ secrets.OCM_SIGNING_PRIVATE_KEY }}
+          OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$OCM_SIGNING_PRIVATE_KEY" ] || [ -z "$OCM_SIGNING_CERT" ]; then
+            echo "::error::OCM_SIGNING_PRIVATE_KEY / OCM_SIGNING_CERT secrets are not set"; exit 1
+          fi
+          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" > "$HOME/.ocmconfig"
+
+      - name: Build and publish OCM components
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          args=(--version "$VERSION" --ocm-repo "$OCM_REPO" --signature "$SIGNATURE"
+                --repo-url "$REPO_URL" --commit "$GITHUB_SHA")
+          [ -n "$MIRROR_FROM" ] && args+=(--mirror-from "$MIRROR_FROM")
+          hack/release/build-aggregate.sh "${args[@]}"
+          {
+            echo "### Published to \`$OCM_REPO\`"
+            echo '```'
+            cat ocm/.generated/published.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Release notes
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: hack/release/release-notes.sh "v${VERSION}" > release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ steps.v.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          flags=(--title "Platform Mesh ${TAG#v}" --notes-file release-notes.md --verify-tag)
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          gh release create "$TAG" "${flags[@]}" \
+            ocm/.generated/constructor.yaml#component-constructor.yaml
