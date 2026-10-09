@@ -24,9 +24,10 @@ name: ci
 #   - for every changed chart: ct lint (includes the version bump check), helm
 #     unittest, generated docs up to date
 #
-# Nothing runs on pushes to main: every commit there went through these checks
-# already. Images are only published for releases (component-release.yml,
-# `<component>/v*` tags); the Platform Mesh release is release.yml (`v*` tags).
+# Nothing is verified on pushes to main: every commit there went through these
+# checks already. The other workflows: images.yml (:latest images on push to
+# main), component-release.yml (`<component>/v*` tags), release.yml (`v*`
+# tags), prerelease.yml (manual builds of main).
 
 on:
   pull_request:

@@ -48,7 +48,7 @@ if [ -z "$changed" ]; then
   selected_charts="$all_charts"
 else
   # Paths that affect every Go component.
-  shared_re='^(go\.work|go\.work\.sum|ocm/components\.yaml|\.github/workflows/ci\.yml|\.github/workflows/component-release\.yml|Taskfile\.yaml|tools/)'
+  shared_re='^(go\.work|go\.work\.sum|ocm/components\.yaml|\.github/workflows/ci\.yml|\.github/workflows/component-release\.yml|\.github/workflows/images\.yml|Taskfile\.yaml|tools/)'
   lib_paths=$(yq '.components | to_entries | map(select(.value.library == true)) | .[].value.path' "$registry")
   for p in $lib_paths; do shared_re="$shared_re|^$p/"; done
 

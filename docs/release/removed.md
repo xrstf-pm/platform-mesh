@@ -13,7 +13,7 @@ anyone wondering where a workflow went.
 | `update-version` jobs dispatching chart bumps into helm-charts via `platform-mesh/.github/job-chart-version-update.yml` | Nothing. Chart `appVersion` bumps are commits in this repository. |
 | `image-ocm` + `image-ocm-legacy` jobs (same OCM component published twice, to `ghcr.io/platform-mesh/platform-mesh` and `ghcr.io/platform-mesh`) via `platform-mesh/.github/job-image-ocm.yml` | `ocm` job in `component-release.yml`, publishing once to `ghcr.io/<owner>` (the repository the aggregate and its consumers use). Logic is inlined; the signing config is written by `hack/release/ocm-config.sh`. |
 | Per-component GitHub releases on `<component>/v*` tags | Nothing. Only Platform Mesh releases (`v*`) get a GitHub release. |
-| `:latest` images pushed on every push to `main` (plus `verify`/`test` re-runs on `main`) | Nothing. Every commit on `main` passed the checks as a pull request / in the merge queue; images exist only for released component versions. Nothing in the repository consumed `:latest`. |
+| `verify`/`test`/`test-e2e` re-runs on every push to `main` (inside the per-component workflows) | Nothing. Every commit on `main` passed the checks as a pull request / in the merge queue. `:latest` images are still built on push to `main`, by `images.yml`, for the changed components only. |
 
 ## helm-charts repository (imported, then removed)
 
