@@ -37,9 +37,10 @@ set -euo pipefail
 repo="${1:?usage: $0 <ocm-repository> [<signature-name>]}"
 signature="${2:-}"
 
+# Credentials are configured per registry host, not per path: OCM v2 matches
+# a consumer's path attribute with path.Match (a glob), so "platform-mesh"
+# would not match a request for "platform-mesh/platform-mesh/<chart>".
 hostname="${repo%%/*}"
-path="${repo#*/}"
-[ "$path" = "$repo" ] && path=""
 
 indent() { sed "s/^/$1/"; }
 
@@ -54,9 +55,6 @@ if [ -n "${GITHUB_TOKEN:-}" ]; then
           type: OCIRegistry
           scheme: https
           hostname: ${hostname}
-EOF
-  [ -n "$path" ] && echo "          path: ${path}"
-  cat <<EOF
         credentials:
           - type: Credentials
             properties:
