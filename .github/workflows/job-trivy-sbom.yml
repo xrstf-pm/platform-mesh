@@ -49,10 +49,10 @@ permissions: {} # Default-deny at workflow level; the job elevates what it needs
 
 env:
   REGISTRY_TOKEN: ${{ secrets.registryToken || secrets.GITHUB_TOKEN }}
-  # Per-repo registry (ghcr.io/<owner>/<repo>) — where this monorepo's image-ocm
-  # job publishes the OCM component version. Upstream uses ghcr.io/<owner>.
-  IMAGE_REPO: ${{ format('ghcr.io/{0}', github.repository) }}
-  COMPONENT: ${{ inputs.componentName || format('github.com/{0}/images/{1}', github.repository_owner, github.event.repository.name) }}
+  # OCM repository the component-release workflow publishes to (org root, the
+  # same repository the Platform Mesh aggregate and its consumers use).
+  IMAGE_REPO: ${{ format('ghcr.io/{0}', github.repository_owner) }}
+  COMPONENT: ${{ inputs.componentName || format('github.com/platform-mesh/images/{0}', github.event.repository.name) }}
 
 jobs:
   scan-sbom:

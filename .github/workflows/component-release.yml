@@ -1,0 +1,388 @@
+# Copyright The Platform Mesh Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: component-release
+
+# Releases ONE component of the monorepo. Triggered by pushing a tag of the
+# form `<component>/vX.Y.Z`, e.g. `account-operator/v0.15.6`. The component
+# must be listed in ocm/components.yaml, which also says where its sources are
+# and which images it produces.
+#
+# What happens:
+#   1. verify + unit tests (+ e2e where the component has them)
+#   2. build and push the image(s) for linux/amd64 and linux/arm64, cosign-sign
+#      them, generate SBOMs and attest them to the primary image
+#   3. publish the signed OCM component github.com/platform-mesh/images/<component>
+#      (image + SBOMs + git source) to ghcr.io/<owner>
+#   4. scan the published SBOM with Trivy
+#
+# What does NOT happen here: no chart is bumped, no GitHub release is created,
+# no Platform Mesh aggregate is built. Charts reference image versions through
+# their appVersion; a Platform Mesh release (`vX.Y.Z` tag, release.yml) picks
+# them up from there.
+#
+# Library components (apis, golang-commons, subroutines) are tagged for Go's
+# sake only; this workflow does nothing for them.
+
+on:
+  push:
+    tags:
+      - '*/v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: component-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # renovate: datasource=github-releases depName=open-component-model/open-component-model
+  OCM_CLI_VERSION: v0.13.0
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Resolve the tag to a component from ocm/components.yaml.
+  # ──────────────────────────────────────────────
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      component: ${{ steps.r.outputs.component }}
+      version: ${{ steps.r.outputs.version }}
+      library: ${{ steps.r.outputs.library }}
+      image: ${{ steps.r.outputs.image }}
+      extraImages: ${{ steps.r.outputs.extraImages }}
+      e2e: ${{ steps.r.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - id: r
+        env:
+          REF: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          component="${REF%/v*}"
+          version="v${REF#*/v}"
+          if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::tag '$REF' does not end in a semver version (vX.Y.Z[-pre])"; exit 1
+          fi
+          if [ "$(yq ".components | has(\"$component\")" ocm/components.yaml)" != "true" ]; then
+            echo "::error::'$component' is not a component listed in ocm/components.yaml"; exit 1
+          fi
+          {
+            echo "component=$component"
+            echo "version=$version"
+            echo "library=$(yq ".components.\"$component\".library // false" ocm/components.yaml)"
+            echo "image=$(yq ".components.\"$component\".image // \"\"" ocm/components.yaml)"
+            echo "extraImages=$(yq -o=json -I=0 ".components.\"$component\".extraImages // []" ocm/components.yaml)"
+            echo "e2e=$(yq ".components.\"$component\".e2e != false" ocm/components.yaml)"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # ──────────────────────────────────────────────
+  # Quality gates, run from the repo root via the root Taskfile so the go.work
+  # workspace is in scope.
+  # ──────────────────────────────────────────────
+  verify:
+    needs: resolve
+    if: needs.resolve.outputs.library != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.work
+          cache: true # zizmor: ignore[cache-poisoning]
+      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: task verify-${COMPONENT}
+        env:
+          COMPONENT: ${{ needs.resolve.outputs.component }}
+
+  test:
+    needs: resolve
+    if: needs.resolve.outputs.library != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.work
+          cache: true # zizmor: ignore[cache-poisoning]
+      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: task test-${COMPONENT}
+        env:
+          COMPONENT: ${{ needs.resolve.outputs.component }}
+
+  test-e2e:
+    needs: resolve
+    if: needs.resolve.outputs.library != 'true' && needs.resolve.outputs.e2e == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.work
+          cache: true # zizmor: ignore[cache-poisoning]
+      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: task test-e2e-${COMPONENT}
+        env:
+          COMPONENT: ${{ needs.resolve.outputs.component }}
+
+  # ──────────────────────────────────────────────
+  # Primary image: build, push, sign, SBOM, attest.
+  # ──────────────────────────────────────────────
+  image:
+    needs: [resolve, verify, test, test-e2e]
+    # test-e2e may be skipped; everything else must have succeeded.
+    if: |
+      always() && needs.resolve.outputs.library != 'true'
+      && needs.verify.result == 'success' && needs.test.result == 'success'
+      && (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push the image
+      id-token: write # keyless cosign signing
+    outputs:
+      imageRef: ${{ steps.build.outputs.imageRef }}
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/platform-mesh/${{ needs.resolve.outputs.image }}
+    steps:
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@5964de0df58d5ad28b04d8fe2e6b80ad47105b91 # v3.5.0
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        id: build
+        env:
+          COMPONENT: ${{ needs.resolve.outputs.component }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          task images-${COMPONENT} \
+            VERSION=${VERSION} \
+            REPO=${GITHUB_REPOSITORY_OWNER}/platform-mesh \
+            PLATFORMS=linux/amd64,linux/arm64 \
+            PUSH=true \
+            METADATA_FILE="${RUNNER_TEMP}/metadata.json"
+          digest=$(jq -r '."containerimage.digest"' "${RUNNER_TEMP}/metadata.json")
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "imageRef=${IMAGE}@${digest}" >> "$GITHUB_OUTPUT"
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign image
+        run: cosign sign --yes "${IMAGE_REF}"
+        env:
+          IMAGE_REF: ${{ steps.build.outputs.imageRef }}
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ steps.build.outputs.imageRef }}
+          format: cyclonedx-json
+          output-file: sbom-cyclonedx.json
+          upload-release-assets: false
+          upload-artifact: false
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        with:
+          image: ${{ steps.build.outputs.imageRef }}
+          format: spdx-json
+          output-file: sbom-spdx.json
+          upload-release-assets: false
+          upload-artifact: false
+      - name: Attest SBOMs to image
+        run: |
+          cosign attest --yes --type cyclonedx --predicate sbom-cyclonedx.json "${IMAGE_REF}"
+          cosign attest --yes --type spdxjson --predicate sbom-spdx.json "${IMAGE_REF}"
+        env:
+          IMAGE_REF: ${{ steps.build.outputs.imageRef }}
+      # The ocm job embeds both files as OCM resources.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom
+          path: |
+            sbom-cyclonedx.json
+            sbom-spdx.json
+          retention-days: 1
+
+  # ──────────────────────────────────────────────
+  # Additional images from plain Dockerfile contexts (ocm/components.yaml
+  # extraImages). Signed, not part of the OCM component.
+  # ──────────────────────────────────────────────
+  extra-images:
+    needs: [resolve, verify, test, test-e2e]
+    if: |
+      always() && needs.resolve.outputs.library != 'true' && needs.resolve.outputs.extraImages != '[]'
+      && needs.verify.result == 'success' && needs.test.result == 'success'
+      && (needs.test-e2e.result == 'success' || needs.test-e2e.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      matrix:
+        image: ${{ fromJson(needs.resolve.outputs.extraImages) }}
+    steps:
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@5964de0df58d5ad28b04d8fe2e6b80ad47105b91 # v3.5.0
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - id: build
+        uses: docker/build-push-action@b32b51a8eda65d6793cd0494a773d4f6bcef32dc # v6.11.0
+        with:
+          context: ${{ matrix.image.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/platform-mesh/${{ matrix.image.name }}:${{ needs.resolve.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - run: cosign sign --yes "ghcr.io/${GITHUB_REPOSITORY_OWNER}/platform-mesh/${NAME}@${DIGEST}"
+        env:
+          NAME: ${{ matrix.image.name }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+  # ──────────────────────────────────────────────
+  # OCM component github.com/platform-mesh/images/<component>.
+  # ──────────────────────────────────────────────
+  ocm:
+    needs: [resolve, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push the component descriptor
+    env:
+      COMPONENT_NAME: github.com/platform-mesh/images/${{ needs.resolve.outputs.component }}
+      VERSION: ${{ needs.resolve.outputs.version }}
+      IMAGE_REF: ${{ needs.image.outputs.imageRef }}
+      OCM_REPO: ghcr.io/${{ github.repository_owner }}
+      # The signature name must equal the CN of the signing certificate.
+      SIGNATURE: ${{ vars.OCM_SIGNATURE_NAME || 'platform-mesh.platform-mesh' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: sbom
+      - name: Install OCM CLI
+        run: |
+          curl -LsSf -o /usr/local/bin/ocm \
+            "https://github.com/open-component-model/open-component-model/releases/download/${OCM_CLI_VERSION}/ocm-linux-amd64"
+          chmod +x /usr/local/bin/ocm
+          ocm version
+      - name: Write OCM config (registry credentials + signing key)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCM_SIGNING_PRIVATE_KEY: ${{ secrets.OCM_SIGNING_PRIVATE_KEY }}
+          OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
+        run: |
+          set -euo pipefail
+          if [ -z "$OCM_SIGNING_PRIVATE_KEY" ] || [ -z "$OCM_SIGNING_CERT" ]; then
+            echo "::error::OCM_SIGNING_PRIVATE_KEY / OCM_SIGNING_CERT secrets are not set"; exit 1
+          fi
+          hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" > "$HOME/.ocmconfig"
+      - name: Build, sign and publish component
+        env:
+          COMMIT: ${{ github.sha }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cat > constructor.yaml <<'EOF'
+          components:
+            - name: "${COMPONENT_NAME}"
+              version: "${VERSION}"
+              provider:
+                name: Platform Mesh Team
+              sources:
+                - name: source
+                  type: git
+                  version: "${VERSION}"
+                  access:
+                    type: gitHub
+                    repoUrl: "${REPO_URL}"
+                    commit: "${COMMIT}"
+              resources:
+                - name: image
+                  type: ociImage
+                  relation: external
+                  version: "${VERSION}"
+                  access:
+                    type: ociArtifact
+                    imageReference: "${IMAGE_REF}"
+                - name: sbom-cyclonedx
+                  type: sbom
+                  input:
+                    type: file
+                    path: sbom-cyclonedx.json
+                    mediaType: application/vnd.cyclonedx+json
+                - name: sbom-spdx
+                  type: sbom
+                  input:
+                    type: file
+                    path: sbom-spdx.json
+                    mediaType: application/spdx+json
+          EOF
+          ocm add component-versions --repository ctf::transport.ctf --constructor constructor.yaml
+          ocm sign component-version --signature "$SIGNATURE" "ctf::transport.ctf//${COMPONENT_NAME}:${VERSION}"
+          ocm transfer component-version "ctf::transport.ctf//${COMPONENT_NAME}:${VERSION}" "$OCM_REPO"
+          echo "Published ${OCM_REPO}//${COMPONENT_NAME}:${VERSION}" >> "$GITHUB_STEP_SUMMARY"
+
+  trivy-image:
+    needs: [resolve, image]
+    uses: ./.github/workflows/job-trivy-image.yml
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    with:
+      imageRef: ${{ needs.image.outputs.imageRef }}
+
+  trivy-sbom:
+    needs: [resolve, ocm]
+    uses: ./.github/workflows/job-trivy-sbom.yml
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+    with:
+      componentName: github.com/platform-mesh/images/${{ needs.resolve.outputs.component }}
+      componentVersion: ${{ needs.resolve.outputs.version }}

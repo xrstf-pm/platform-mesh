@@ -20,12 +20,12 @@ limitations under the License.
 // prefix is the component name (for go-gettable modules it is also the module's
 // directory path, so the tag doubles as the Go-module tag). Library components
 // (e.g. golang-commons) are merely tagged to become go-gettable and do not
-// produce a container image, all other components get
+// produce a container image, all other components get a signed image with
+// SBOMs and a signed OCM component (component-release.yml).
 //
-//   - a GitHub release
-//   - a chart bump
-//   - an SBOM
-//   - an OCM component
+// Component tags do not bump charts and do not create GitHub releases. A
+// Platform Mesh release is a separate `vX.Y.Z` tag on this repository that
+// picks up the chart and image versions committed at that point.
 //
 // It finds the component's latest existing tag, bumps it (patch by default),
 // and creates + pushes the new tag — the release workflow does the rest.
@@ -462,7 +462,7 @@ func usage() {
 			continue
 		}
 
-		componentStrings = append(componentStrings, fmt.Sprintf(fmtString, name, name, "(signed image + release + chart + SBOM + OCM)"))
+		componentStrings = append(componentStrings, fmt.Sprintf(fmtString, name, name, "(signed image + SBOM + OCM component)"))
 	}
 
 	componentStrings = append(componentStrings, fmt.Sprintf(fmtString, "all", "every component", "(independent versions)"))
