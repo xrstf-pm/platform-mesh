@@ -22,7 +22,7 @@ set -euo pipefail
 
 charts_dir="${1:-}"
 if [ -z "$charts_dir" ]; then
-  charts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/charts"
+  charts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/charts"
 fi
 
 if [ ! -d "$charts_dir" ]; then

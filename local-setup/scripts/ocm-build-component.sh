@@ -159,44 +159,9 @@ resolve_component_versions() {
 
     echo -e "${COL}[$(date '+%H:%M:%S')] Resolving third-party component versions...${COL_RES}"
 
-    # Third-party version pins live in .github/workflows-helm-charts/ocm-aggregator.yaml (TEMPORARY: moves to ocm/versions.yaml)'s env block.
-    local agg="$PROJECT_ROOT/.github/workflows-helm-charts/ocm-aggregator.yaml"
-    export KCP_OPERATOR_CHART_VERSION=$(yq -r '.jobs.ocm.env.KCP_OPERATOR_CHART_VERSION' "$agg")
-    export KCP_OPERATOR_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.KCP_OPERATOR_IMAGE_VERSION' "$agg")
-    export KCP_VERSION=$(yq -r '.jobs.ocm.env.KCP_VERSION' "$agg")
-    export INIT_AGENT_CHART_VERSION=$(yq -r '.jobs.ocm.env.INIT_AGENT_CHART_VERSION' "$agg")
-    export INIT_AGENT_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.INIT_AGENT_IMAGE_VERSION' "$agg")
-    export API_SYNCAGENT_CHART_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_CHART_VERSION' "$agg")
-    export API_SYNCAGENT_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_IMAGE_VERSION' "$agg")
-    export API_SYNCAGENT_COMPONENT_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_COMPONENT_VERSION' "$agg")
-    export OPENFGA_VERSION=$(yq -r '.jobs.ocm.env.OPENFGA_VERSION' "$agg")
-    export OPENFGA_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.OPENFGA_IMAGE_VERSION' "$agg")
-    export OPENFGA_POSTGRESQL_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.OPENFGA_POSTGRESQL_IMAGE_VERSION' "$agg")
-    export TRAEFIK_VERSION=$(yq -r '.jobs.ocm.env.TRAEFIK_VERSION' "$agg")
-    export TRAEFIK_CHART_VERSION=$(yq -r '.jobs.ocm.env.TRAEFIK_CHART_VERSION' "$agg")
-    export TRAEFIK_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.TRAEFIK_IMAGE_VERSION' "$agg")
-    export TRAEFIK_CRD_VERSION=$(yq -r '.jobs.ocm.env.TRAEFIK_CRD_VERSION' "$agg")
-    export CERT_MANAGER_VERSION=$(yq -r '.jobs.ocm.env.CERT_MANAGER_VERSION' "$agg")
-    export CNPG_OPERATOR_CHART_VERSION=$(yq -r '.jobs.ocm.env.CNPG_OPERATOR_CHART_VERSION' "$agg")
-    export CNPG_OPERATOR_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.CNPG_OPERATOR_IMAGE_VERSION' "$agg")
-    export PROMETHEUS_OPERATOR_CRDS_VERSION=$(yq -r '.jobs.ocm.env.PROMETHEUS_OPERATOR_CRDS_VERSION' "$agg")
-    export KUBE_PROMETHEUS_STACK_VERSION=$(yq -r '.jobs.ocm.env.KUBE_PROMETHEUS_STACK_VERSION' "$agg")
-    export OPENTELEMETRY_OPERATOR_VERSION=$(yq -r '.jobs.ocm.env.OPENTELEMETRY_OPERATOR_VERSION' "$agg")
-    export OTEL_OPERATOR_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.OTEL_OPERATOR_IMAGE_VERSION' "$agg")
-    export OTEL_COLLECTOR_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.OTEL_COLLECTOR_IMAGE_VERSION' "$agg")
-    export OTEL_TARGET_ALLOCATOR_VERSION=$(yq -r '.jobs.ocm.env.OTEL_TARGET_ALLOCATOR_VERSION' "$agg")
-    export KEYCLOAK_VERSION=$(yq -r '.jobs.ocm.env.PM_KEYCLOAK_VERSION' "$agg")
-    export GARDENER_ETCD_DRUID_VERSION=$(yq -r '.jobs.ocm.env.GARDENER_ETCD_DRUID_VERSION' "$agg")
-    export PM_TRAEFIK_VERSION="0.0.1"
-    export PM_CERT_MANAGER_VERSION="0.0.1"
-    export PM_KCP_OPERATOR_VERSION="0.0.1"
-    export PM_KCP_VERSION="0.0.3"
-    export PM_INIT_AGENT_VERSION="0.0.1"
-    export PM_OPENFGA_VERSION="0.0.1"
-    export PM_CNPG_OPERATOR_VERSION="0.0.1"
-    export PM_PROMETHEUS_OPERATOR_CRDS_VERSION="0.0.1"
-    export PM_KUBE_PROMETHEUS_STACK_VERSION="0.0.1"
-    export PM_OPENTELEMETRY_OPERATOR_VERSION="0.0.2"
+    # Third-party version pins live in ocm/versions.yaml.
+    # shellcheck disable=SC1090
+    source <("$PROJECT_ROOT/hack/release/export-versions.sh" --export)
 
     transfer_to_oci etcd-druid \
         europe-docker.pkg.dev/gardener-project/releases//github.com/gardener/etcd-druid \
@@ -262,11 +227,6 @@ build_final_component() {
     kubectl exec $(get_kubectl_exec_flags) ocm-transfer-pod -- \
         env \
         VERSION="$COMPONENT_PRERELEASE_VERSION" \
-        ISTIO_VERSION="$ISTIO_VERSION" \
-        OPENFGA_VERSION="$OPENFGA_VERSION" \
-        PM_OPENFGA_VERSION="$PM_OPENFGA_VERSION" \
-        KCP_OPERATOR_VERSION="$KCP_OPERATOR_VERSION" \
-        GARDENER_ETCD_DRUID_VERSION="$GARDENER_ETCD_DRUID_VERSION" \
         ACCOUNT_OPERATOR_VERSION="$ACCOUNT_OPERATOR_VERSION" \
         PLATFORM_MESH_OPERATOR_VERSION="$PLATFORM_MESH_OPERATOR_VERSION" \
         EXTENSION_MANAGER_OPERATOR_VERSION="$EXTENSION_MANAGER_OPERATOR_VERSION" \
@@ -275,8 +235,6 @@ build_final_component() {
         INFRA_VERSION="$INFRA_VERSION" \
         KUBERNETES_GRAPHQL_GATEWAY_VERSION="$KUBERNETES_GRAPHQL_GATEWAY_VERSION" \
         PORTAL_VERSION="$PORTAL_VERSION" \
-        KEYCLOAK_VERSION="$KEYCLOAK_VERSION" \
-        PM_KEYCLOAK_VERSION="$KEYCLOAK_VERSION" \
         KEYCLOAK_OPERATOR_VERSION="$KEYCLOAK_OPERATOR_VERSION" \
         VIRTUAL_WORKSPACES_VERSION="$VIRTUAL_WORKSPACES_VERSION" \
         EXAMPLE_HTTPBIN_OPERATOR_VERSION="$EXAMPLE_HTTPBIN_OPERATOR_VERSION" \
@@ -285,41 +243,9 @@ build_final_component() {
         IAM_UI_VERSION="$IAM_UI_VERSION" \
         MARKETPLACE_UI_VERSION="$MARKETPLACE_UI_VERSION" \
         GATEWAY_API_CHART_VERSION="$GATEWAY_API_CHART_VERSION" \
-        TRAEFIK_VERSION="$TRAEFIK_VERSION" \
-        TRAEFIK_CRD_VERSION="$TRAEFIK_CRD_VERSION" \
-        TRAEFIK_CHART_VERSION="$TRAEFIK_CHART_VERSION" \
-        CERT_MANAGER_VERSION="$CERT_MANAGER_VERSION" \
-        KCP_OPERATOR_CHART_VERSION="$KCP_OPERATOR_CHART_VERSION" \
-        KCP_OPERATOR_IMAGE_VERSION="$KCP_OPERATOR_IMAGE_VERSION" \
-        KCP_VERSION="$KCP_VERSION" \
-        INIT_AGENT_CHART_VERSION="$INIT_AGENT_CHART_VERSION" \
-        INIT_AGENT_IMAGE_VERSION="$INIT_AGENT_IMAGE_VERSION" \
-        API_SYNCAGENT_CHART_VERSION="$API_SYNCAGENT_CHART_VERSION" \
-        API_SYNCAGENT_IMAGE_VERSION="$API_SYNCAGENT_IMAGE_VERSION" \
-        API_SYNCAGENT_COMPONENT_VERSION="$API_SYNCAGENT_COMPONENT_VERSION" \
-        TRAEFIK_IMAGE_VERSION="$TRAEFIK_IMAGE_VERSION" \
-        OPENFGA_IMAGE_VERSION="$OPENFGA_IMAGE_VERSION" \
-        OPENFGA_POSTGRESQL_IMAGE_VERSION="$OPENFGA_POSTGRESQL_IMAGE_VERSION" \
-        CNPG_OPERATOR_VERSION="$CNPG_OPERATOR_VERSION" \
-        CNPG_OPERATOR_CHART_VERSION="$CNPG_OPERATOR_CHART_VERSION" \
-        CNPG_OPERATOR_IMAGE_VERSION="$CNPG_OPERATOR_IMAGE_VERSION" \
         TERMINAL_CONTROLLER_MANAGER_VERSION="$TERMINAL_CONTROLLER_MANAGER_VERSION" \
         OBSERVABILITY_VERSION="$OBSERVABILITY_VERSION" \
-        PROMETHEUS_OPERATOR_CRDS_VERSION="$PROMETHEUS_OPERATOR_CRDS_VERSION" \
-        KUBE_PROMETHEUS_STACK_VERSION="$KUBE_PROMETHEUS_STACK_VERSION" \
-        OPENTELEMETRY_OPERATOR_VERSION="$OPENTELEMETRY_OPERATOR_VERSION" \
-        OTEL_OPERATOR_IMAGE_VERSION="$OTEL_OPERATOR_IMAGE_VERSION" \
-        OTEL_COLLECTOR_IMAGE_VERSION="$OTEL_COLLECTOR_IMAGE_VERSION" \
-        OTEL_TARGET_ALLOCATOR_VERSION="$OTEL_TARGET_ALLOCATOR_VERSION" \
-        PM_TRAEFIK_VERSION="$PM_TRAEFIK_VERSION" \
-        PM_CERT_MANAGER_VERSION="$PM_CERT_MANAGER_VERSION" \
-        PM_KCP_OPERATOR_VERSION="$PM_KCP_OPERATOR_VERSION" \
-        PM_KCP_VERSION="$PM_KCP_VERSION" \
-        PM_INIT_AGENT_VERSION="$PM_INIT_AGENT_VERSION" \
-        PM_CNPG_OPERATOR_VERSION="$PM_CNPG_OPERATOR_VERSION" \
-        PM_PROMETHEUS_OPERATOR_CRDS_VERSION="$PM_PROMETHEUS_OPERATOR_CRDS_VERSION" \
-        PM_KUBE_PROMETHEUS_STACK_VERSION="$PM_KUBE_PROMETHEUS_STACK_VERSION" \
-        PM_OPENTELEMETRY_OPERATOR_VERSION="$PM_OPENTELEMETRY_OPERATOR_VERSION" \
+        $("$PROJECT_ROOT/hack/release/export-versions.sh") \
         ocm add component-versions \
         --component-version-conflict-policy replace \
         --repository "oci-registry-docker-registry.registry.svc.cluster.local/platform-mesh" \
@@ -346,10 +272,8 @@ build_component() {
     # Export version pins needed by prefill_ctf before build_local_charts runs.
     # The full set is exported later in resolve_component_versions; these are
     # needed early because prefill_ctf must run before Phase 2 of build_local_charts.
-    local agg="$PROJECT_ROOT/.github/workflows-helm-charts/ocm-aggregator.yaml"
-    export API_SYNCAGENT_CHART_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_CHART_VERSION' "$agg")
-    export API_SYNCAGENT_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_IMAGE_VERSION' "$agg")
-    export API_SYNCAGENT_COMPONENT_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_COMPONENT_VERSION' "$agg")
+    # shellcheck disable=SC1090
+    source <("$PROJECT_ROOT/hack/release/export-versions.sh" --export)
 
     # Pre-populate local OCI registry with externals that component-specific constructors reference.
     # Must happen before build_local_charts Phase 2.

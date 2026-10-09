@@ -18,7 +18,7 @@ set -euo pipefail
 #   ./hack/demo-oci-migration.sh --dry-run   # leave the local registry + CTFs running for inspection
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
@@ -63,8 +63,7 @@ if ! ocm_is_legacy "$OCM"; then
   exit 1
 fi
 
-OCM_YAML="$REPO_ROOT/.github/workflows/ocm.yaml"
-CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-$(yq eval '.jobs.ocm.env.CERT_MANAGER_VERSION' "$OCM_YAML")}"
+CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-$(yq '.CERT_MANAGER_VERSION' "$REPO_ROOT/ocm/versions.yaml")}"
 
 # The OCI mirror location — produced by the mirror-helm-chart.yaml workflow in this repo.
 # This must already exist before running the AFTER scenario.
