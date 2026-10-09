@@ -11,7 +11,7 @@
 
 Platform Mesh is an open, multi-tenant developer platform built on [kcp](https://github.com/kcp-dev/kcp). It provides account-based tenancy, relationship-based authorization (ReBAC via [OpenFGA](https://openfga.dev/)), search, and UI extensibility on top of a Kubernetes-like control plane.
 
-This repository is the Platform Mesh **monorepo**: it consolidates the shared libraries, operators, services, and tooling that make up the platform. Each component is its own Go module, linked together through the repository-root [`go.work`](go.work) workspace, and released independently via component-scoped tags.
+This repository is the Platform Mesh **monorepo**: it consolidates the shared libraries, operators, services, and tooling that make up the platform. Each component is its own Go module, linked together through the repository-root [`go.work`](go.work) workspace. The Helm charts (`charts/`), the OCM component definitions (`ocm/`) and the local development environment (`local-setup/`) live here as well.
 
 ## Components
 
@@ -48,7 +48,7 @@ This repository is the Platform Mesh **monorepo**: it consolidates the shared li
 
 ### Tooling
 
-Repository tooling lives under [`cmd/`](cmd) — including [`release`](cmd/release), which cuts component-scoped release tags for the monorepo.
+Repository tooling lives under [`cmd/`](cmd) — including [`release`](cmd/release), which cuts component release tags — and [`hack/release/`](hack/release), which builds and publishes the OCM components.
 
 ## Getting started
 
@@ -114,7 +114,7 @@ See [contrib/tilt/README.md](contrib/tilt/README.md) for the full environment: w
 
 ## Releasing
 
-Releases are component-scoped: tagging `<component>/vX.Y.Z` triggers that component's GitHub Actions workflow to build and sign its image, cut a GitHub release, bump its chart, and publish a signed OCM component. The [`release`](cmd/release) tool (`task release`) manages the tag registry and ordering.
+Component images are released by tagging `<component>/vX.Y.Z` (`task release -- <component>`); Platform Mesh itself by tagging `vX.Y.Z`, which publishes the signed OCM component graph for the charts and versions committed at that point and creates a GitHub release. See [docs/release/process.md](docs/release/process.md).
 
 ## Requirements
 
