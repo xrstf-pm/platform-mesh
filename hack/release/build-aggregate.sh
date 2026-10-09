@@ -111,7 +111,7 @@ done
 # for the constructor template and for ${...} in ocm/charts/*.yaml.
 # shellcheck disable=SC1090
 source <(hack/release/export-versions.sh --export)
-export VERSION COMPONENT_NAME="$COMPONENT"
+export VERSION COMPONENT_NAME="$COMPONENT" REPO_URL COMMIT
 
 chart_var() { # account-operator -> ACCOUNT_OPERATOR_VERSION
   echo "$1" | tr 'a-z-' 'A-Z_' | sed 's/$/_VERSION/'
@@ -315,9 +315,16 @@ while IFS=$'\t' read -r cname cver; do
     new_components+=("$cname:$cver")
     continue
   fi
+  # Resources and references identify a component version. The source commit
+  # only matters for the aggregate (re-tagging a released version from another
+  # commit); sub-components keep the commit they were first published from.
   shape='{res: ([.resources[]? | {name, version}] | sort_by(.name)),
-          refs: ([.componentReferences[]? | {name, componentName, version}] | sort_by(.name)),
-          src: ([.sources[]? | {name, commit: .access.commit}] | sort_by(.name))}'
+          refs: ([.componentReferences[]? | {name, componentName, version}] | sort_by(.name))}'
+  if [[ "$cname" == "$COMPONENT" ]]; then
+    shape='{res: ([.resources[]? | {name, version}] | sort_by(.name)),
+            refs: ([.componentReferences[]? | {name, componentName, version}] | sort_by(.name)),
+            src: ([.sources[]? | {name, commit: .access.commit}] | sort_by(.name))}'
+  fi
   want="$(jq -c --arg n "$cname" --arg v "$cver" ".components[] | select(.name == \$n and .version == \$v) | $shape" <<<"$generated")"
   have="$(ocm get component-version "$OCM_REPO//$cname:$cver" -o json | jq -c "(if type == \"array\" then .[0] else . end) | .component | $shape")"
   if [[ "$want" != "$have" ]]; then
