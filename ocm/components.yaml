@@ -17,9 +17,12 @@
 # sources are, which images they produce) and for the release notes.
 #
 # Keys are the component names. A component is released by pushing the tag
-# `<name>/vX.Y.Z`, which builds and signs its image(s) and publishes the OCM
-# component `github.com/platform-mesh/images/<name>`. Libraries are only tagged
-# (Go needs `<dir>/vX.Y.Z`), nothing is built.
+# `<name>/vX.Y.Z` (`task release -- <name>`), which builds and signs its
+# image(s) and publishes the OCM component `github.com/platform-mesh/images/<name>`.
+# Libraries are only tagged (Go needs `<dir>/vX.Y.Z`), nothing is built.
+#
+# The order matters for `task release -- all`: list a module before the
+# modules that import it, so its tag exists when the consumers are bumped.
 #
 # Fields:
 #   path         directory of the component (module root)
@@ -36,16 +39,16 @@
 
 components:
   # --- libraries -------------------------------------------------------------
-  apis:
-    path: apis
-    library: true
-    e2e: false
   golang-commons:
     path: golang-commons
     library: true
     e2e: false
   subroutines:
     path: subroutines
+    library: true
+    e2e: false
+  apis: # imports golang-commons and subroutines
+    path: apis
     library: true
     e2e: false
 

@@ -61,8 +61,8 @@ import (
 	"strings"
 )
 
-// The release component registry (component, componentOrder, components,
-// libraryComponents) lives in const.go.
+// The component registry (component, componentOrder, components,
+// libraryComponents) is loaded from ocm/components.yaml; see registry.go.
 
 // plan is one component's resolved release step: the tag it moves from, the
 // full tag to create, the bare version (e.g. v0.0.1), and what cutting it
@@ -86,6 +86,9 @@ type options struct {
 }
 
 func run(args []string) error {
+	if err := loadRegistry(); err != nil {
+		return err
+	}
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		usage()
 		return nil

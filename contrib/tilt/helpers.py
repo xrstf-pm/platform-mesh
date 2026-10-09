@@ -32,7 +32,7 @@ def chart_path(name, version=None, oci_repo=None, cache_dir='.cache/charts'):
     directory is used and charts render live. Set HELM_CHARTS_DIR to point at
     a different checkout. If TILT_CHARTS_FROM_OCI is set and version/oci_repo
     are given, the pinned version is pulled from the OCI registry into
-    cache_dir instead (the pre-monorepo-merge behaviour).
+    cache_dir instead.
 
     Returns a path suitable for helm(...).
     """
