@@ -85,9 +85,22 @@ vars:
   OCM_VERSION: 0.13.0
   OCM: '{{.BIN}}/ocm-{{.OCM_VERSION}}'
 
+  # The chart tooling is installed without version suffix (bin/helm etc., see
+  # `versioned: 'false'` on the tasks): ct and helm plugins invoke `helm` by
+  # name, and charts/Taskfile.yaml refers to the binaries by their stable path
+  # (a `sh:` var calling task to look up the path does not work from an
+  # included Taskfile). uget still reinstalls them when the version changes.
   # renovate: datasource=github-releases depName=helm/helm
   HELM_VERSION: v4.2.3
-  HELM: '{{.BIN}}/helm-{{.HELM_VERSION}}'
+  HELM: '{{.BIN}}/helm'
+
+  # renovate: datasource=github-releases depName=helm/chart-testing
+  CT_VERSION: 3.15.0
+  CT: '{{.BIN}}/ct'
+
+  # renovate: datasource=github-releases depName=norwoodj/helm-docs
+  HELM_DOCS_VERSION: 1.14.2
+  HELM_DOCS: '{{.BIN}}/helm-docs'
 
   # renovate: datasource=github-releases depName=mikefarah/yq
   YQ_VERSION: v4.52.4
@@ -249,6 +262,25 @@ tasks:
           source: 'https://get.helm.sh/helm-{VERSION}-{GOOS}-{GOARCH}.tar.gz'
           version: '{{ .HELM_VERSION }}'
           extractArg: '*/helm'
+          versioned: 'false'
+  ct:
+    cmds:
+      - task: uget
+        vars:
+          tool: ct
+          source: 'https://github.com/helm/chart-testing/releases/download/v{VERSION}/chart-testing_{VERSION}_{GOOS}_{GOARCH}.tar.gz'
+          version: '{{ .CT_VERSION }}'
+          extractArg: ct
+          versioned: 'false'
+  helm-docs:
+    cmds:
+      - task: uget
+        vars:
+          tool: helm-docs
+          source: 'https://github.com/norwoodj/helm-docs/releases/download/v{VERSION}/helm-docs_{VERSION}_{ENV:MY_OS}_{ENV:MY_ARCH}.tar.gz'
+          version: '{{ .HELM_DOCS_VERSION }}'
+          extractArg: helm-docs
+          versioned: 'false'
   yq:
     cmds:
       - task: uget
@@ -300,6 +332,7 @@ tasks:
       extractArg: '{{ .extractArg | default "" }}'
       goModule: '{{ .goModule | default "false" }}'
       uncompressed: '{{ .uncompressed | default "false" }}'
+      versioned: '{{ .versioned | default "true" }}'
     env:
       # µget's default UOS/OARCH are lowercased, but we need the uppercased version
       # for mockery. Taskfiles do not allow envs to be inherited by subtasks, so we
@@ -307,7 +340,7 @@ tasks:
       MY_OS: { sh: uname -s }
       MY_ARCH: { sh: uname -m }
     cmds:
-      - "UNCOMPRESSED={{ .uncompressed }} GO_MODULE={{ .goModule }} {{.HACK}}/uget.sh {{ .source }} {{ .tool }} {{ .version }} '{{ .extractArg }}'"
+      - "UNCOMPRESSED={{ .uncompressed }} GO_MODULE={{ .goModule }} UGET_VERSIONED_BINARIES={{ .versioned }} {{.HACK}}/uget.sh {{ .source }} {{ .tool }} {{ .version }} '{{ .extractArg }}'"
 
   lint:
     desc: Lint all Go code in the repository using golangci-lint.

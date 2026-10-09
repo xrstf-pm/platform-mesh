@@ -17,8 +17,24 @@ version: "3"
 # Helm chart tasks. Included from the root Taskfile as `charts`, so run e.g.
 # `task charts:lint`. All paths are relative to the repository root.
 
+includes:
+  # Pinned tooling (helm, ct, helm-docs), installed into the root bin/.
+  tools:
+    taskfile: ../tools/Taskfile.yaml
+    dir: ..
+
 vars:
   LOCAL_BIN: bin
+  # Pinned tools from tools/Taskfile.yaml (installed by the tools:* deps).
+  HELM: '{{.LOCAL_BIN}}/helm'
+  CT: '{{.LOCAL_BIN}}/ct'
+  HELM_DOCS: '{{.LOCAL_BIN}}/helm-docs'
+  # renovate: datasource=github-releases depName=helm-unittest/helm-unittest
+  HELM_UNITTEST_VERSION: v1.2.1
+
+env:
+  # ct and helm plugins call `helm` by name.
+  PATH: '{{.ROOT_DIR}}/bin:{{env "PATH"}}'
   CHARTS:
     sh: "printf '%s' $(ls -d charts/*/ | paste -sd ',' -)"
   CHANGED_CHARTS:
@@ -31,22 +47,34 @@ tasks:
       - mkdir -p $(pwd)/{{.LOCAL_BIN}}
       - test -s {{.LOCAL_BIN}}/kube-linter || GOBIN=$(pwd)/{{.LOCAL_BIN}} go install golang.stackrox.io/kube-linter/cmd/kube-linter@latest
       - chmod +x $(pwd)/{{.LOCAL_BIN}}/kube-linter
-  setup:helm-docs:
+  setup:helm:
     internal: true
     cmds:
-      - test -s {{.LOCAL_BIN}}/helm-docs || GOBIN=$(pwd)/{{.LOCAL_BIN}} go install github.com/norwoodj/helm-docs/cmd/helm-docs@v1.14.2
+      - task: tools:helm
+  setup:helm-unittest:
+    internal: true
+    deps: [setup:helm]
+    cmds:
+      - "{{.HELM}} plugin list | grep -q '^unittest' || {{.HELM}} plugin install https://github.com/helm-unittest/helm-unittest --version {{.HELM_UNITTEST_VERSION}}"
 
+  # ct lint also checks that every changed chart (vs. TARGET_BRANCH) bumped its
+  # version, which is what keeps published chart versions immutable. ct needs
+  # yamllint and yamale on PATH (pip install yamllint yamale).
   lint:
-    deps: []
+    deps: [setup:helm, tools:ct]
+    vars:
+      TARGET_BRANCH: '{{.TARGET_BRANCH | default "main"}}'
     cmds:
       - "./hack/charts/lint-image-schema.sh"
-      - "ct lint --target-branch main --chart-dirs=charts --validate-maintainers=false --chart-repos=bitnami=https://charts.bitnami.com/bitnami,openfga=https://openfga.github.io/helm-charts"
+      - "{{.CT}} lint --target-branch {{.TARGET_BRANCH}} --chart-dirs=charts --validate-maintainers=false --chart-repos=bitnami=https://charts.bitnami.com/bitnami,openfga=https://openfga.github.io/helm-charts,prometheus-community=https://prometheus-community.github.io/helm-charts,open-telemetry=https://open-telemetry.github.io/opentelemetry-helm-charts"
   helmtest:
+    deps: [setup:helm-unittest]
     cmds:
-      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do helm unittest $chart; done"
+      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do {{.HELM}} unittest $chart; done"
   helmtest-update:
+    deps: [setup:helm-unittest]
     cmds:
-      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do helm unittest -u $chart; done"
+      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do {{.HELM}} unittest -u $chart; done"
   test:
     deps:
       - task: helmtest
@@ -54,12 +82,13 @@ tasks:
     deps:
       - task: docs
     cmds:
-      - "for chart in $(echo {{.CHANGED_CHARTS}} | tr ',' ' '); do helm dependency update $chart && helm unittest -u $chart; done"
+      - "for chart in $(echo {{.CHANGED_CHARTS}} | tr ',' ' '); do {{.HELM}} dependency update $chart && {{.HELM}} unittest -u $chart; done"
   update:
     deps:
       - task: docs
+      - task: setup:helm
     cmds:
-      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do helm dependency update $chart; done"
+      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do {{.HELM}} dependency update $chart; done"
   validate:
     cmds:
       - task: test
@@ -73,10 +102,9 @@ tasks:
     cmds:
       - "{{.LOCAL_BIN}}/kube-linter lint \"charts/\" --format \"plain\""
   docs:
-    deps:
-      - task: setup:helm-docs
+    deps: [tools:helm-docs]
     cmds:
-      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do {{.LOCAL_BIN}}/helm-docs --log-level=debug --chart-search-root $chart --template-files=../.docs-templates/header.md.gotmpl,README.md.gotmpl,../.docs-templates/footer.md.gotmpl --skip-version-footer=false; done"
+      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do {{.HELM_DOCS}} --log-level=debug --chart-search-root $chart --template-files=../.docs-templates/header.md.gotmpl,README.md.gotmpl,../.docs-templates/footer.md.gotmpl --skip-version-footer=false; done"
   oci:
     desc: Package all charts into oci/
     cmds:

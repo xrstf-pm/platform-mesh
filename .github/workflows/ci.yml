@@ -180,31 +180,22 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Enforce common image schema (air-gap localization)
-        run: ./hack/charts/lint-image-schema.sh
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install helm (pinned in tools/Taskfile.yaml)
-        run: sudo ln -s "$(UGET_PRINT_PATH=absolute task tools:helm)" /usr/local/bin/helm
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.x'
-          check-latest: true
-      - uses: helm/chart-testing-action@6ec842c01de15ebb84c8627d2744a0c2f2755c9f # v2.8.0
-        with:
-          version: 'v3.14.0'
-          yamllint_version: '1.37.0'
-          yamale_version: '5.2.1'
+      - name: Install yamllint and yamale (used by ct lint)
+        run: pip install --quiet yamllint==1.37.0 yamale==5.2.1
       - name: Log in to ghcr.io (chart dependencies)
-        run: echo "${GITHUB_TOKEN}" | helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+        run: task tools:helm && echo "${GITHUB_TOKEN}" | bin/helm registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # ct lint also fails if a changed chart's version was not bumped.
-      - name: Lint charts (ct lint, includes version bump check)
-        run: |
-          ct lint --target-branch "${DEFAULT_BRANCH}" --chart-dirs=charts --validate-maintainers=false \
-            --chart-repos=bitnami=https://charts.bitnami.com/bitnami,openfga=https://openfga.github.io/helm-charts,prometheus-community=https://prometheus-community.github.io/helm-charts,open-telemetry=https://open-telemetry.github.io/opentelemetry-helm-charts
+      # Image schema check + ct lint; the latter also fails if a changed
+      # chart's version was not bumped.
+      - name: Lint charts
+        run: task charts:lint TARGET_BRANCH="${DEFAULT_BRANCH}"
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
 
@@ -223,12 +214,8 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install helm (pinned in tools/Taskfile.yaml)
-        run: sudo ln -s "$(UGET_PRINT_PATH=absolute task tools:helm)" /usr/local/bin/helm
-      - name: Install helm-unittest
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest
       - name: Chart unit tests
-        run: helm unittest "charts/${CHART}"
+        run: task charts:helmtest CHARTS="charts/${CHART}"
         env:
           CHART: ${{ matrix.chart }}
 
@@ -256,10 +243,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: go.work
-          cache: true # zizmor: ignore[cache-poisoning]
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
