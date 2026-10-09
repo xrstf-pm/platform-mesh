@@ -134,7 +134,7 @@ build_component() {
     build_component_graph
 
     echo ""
-    echo -e "${COL}[$(date '+%H:%M:%S')] Built $PRERELEASE_COMPONENT:$COMPONENT_PRERELEASE_VERSION from the working tree${COL_RES}"
+    echo -e "${COL}[$(date '+%H:%M:%S')] Built $PRERELEASE_COMPONENT:$COMPONENT_PRERELEASE_VERSION from the working tree into $LOCAL_OCM_REPO (component names are a contract and do not follow the GitHub org)${COL_RES}"
 }
 
 main() {

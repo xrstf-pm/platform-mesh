@@ -365,5 +365,5 @@ if [[ -n "$SIGNATURE" ]]; then
   done
 fi
 
-log "done: $COMPONENT:$VERSION"
+log "done: $COMPONENT:$VERSION published to $TARGET"
 printf '%s\n' "${new_components[@]}" > "$(dirname "$OUTPUT")/published.txt"
