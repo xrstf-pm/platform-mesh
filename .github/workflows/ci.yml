@@ -24,8 +24,9 @@ name: ci
 #     - for every changed chart: ct lint (includes the version bump check),
 #       helm unittest, generated docs up to date
 #   Push to main:
-#     - the same for ALL components, plus the mutable :latest image is pushed
-#       and signed
+#     - no verification (the commit passed these checks as a pull request and
+#       in the merge queue); only the mutable :latest image of every changed
+#       component is built, pushed and signed
 #
 # Releases are not handled here: see component-release.yml (`<component>/v*`
 # tags) and release.yml (`v*` tags).
@@ -63,14 +64,13 @@ jobs:
       - name: Detect changed components and charts
         id: c
         env:
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" = "push" ]; then
-            changed=""   # everything
-          else
+          if git cat-file -e "$BASE" 2>/dev/null; then
             changed="$(git diff --name-only "$BASE...HEAD")"
+          else
+            changed=""   # unknown base (e.g. force push): everything
           fi
           hack/release/changed-components.sh "$changed" | tee -a "$GITHUB_OUTPUT"
 
@@ -79,7 +79,7 @@ jobs:
   # ──────────────────────────────────────────────
   verify:
     needs: changes
-    if: needs.changes.outputs.components != '[]'
+    if: github.event_name != 'push' && needs.changes.outputs.components != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -103,7 +103,7 @@ jobs:
 
   test:
     needs: changes
-    if: needs.changes.outputs.components != '[]'
+    if: github.event_name != 'push' && needs.changes.outputs.components != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -127,7 +127,7 @@ jobs:
 
   test-e2e:
     needs: changes
-    if: needs.changes.outputs.e2eComponents != '[]'
+    if: github.event_name != 'push' && needs.changes.outputs.e2eComponents != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -149,10 +149,14 @@ jobs:
         env:
           COMPONENT: ${{ matrix.component }}
 
-  # PR: build only. main: push and sign :latest.
+  # PR: build only, after the checks passed. main: push and sign :latest
+  # (no checks; the commit was verified before merging).
   image:
     needs: [changes, verify, test]
-    if: needs.changes.outputs.imageComponents != '[]'
+    if: |
+      always() && needs.changes.outputs.imageComponents != '[]'
+      && (needs.verify.result == 'success' || needs.verify.result == 'skipped')
+      && (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -216,7 +220,7 @@ jobs:
   # ──────────────────────────────────────────────
   chart-lint:
     needs: changes
-    if: needs.changes.outputs.charts != '[]'
+    if: github.event_name != 'push' && needs.changes.outputs.charts != '[]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -251,7 +255,7 @@ jobs:
 
   chart-unittest:
     needs: changes
-    if: needs.changes.outputs.charts != '[]'
+    if: github.event_name != 'push' && needs.changes.outputs.charts != '[]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -275,7 +279,7 @@ jobs:
   # the operator version in values.yaml.
   chart-keycloak-crds:
     needs: changes
-    if: contains(fromJson(needs.changes.outputs.charts), 'keycloak-operator')
+    if: github.event_name != 'push' && contains(fromJson(needs.changes.outputs.charts), 'keycloak-operator')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -289,7 +293,7 @@ jobs:
 
   chart-docs:
     needs: changes
-    if: needs.changes.outputs.charts != '[]'
+    if: github.event_name != 'push' && needs.changes.outputs.charts != '[]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
