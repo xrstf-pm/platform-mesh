@@ -54,6 +54,43 @@ var components = map[string]component{}
 // user's back.
 var libraryComponents = map[string]bool{}
 
+// registry mirrors the structure of ocm/components.yaml.
+type registry struct {
+	Components orderedComponents `yaml:"components"`
+}
+
+// componentSpec is one entry of the components map; only the fields this
+// tool needs are declared.
+type componentSpec struct {
+	Path    string `yaml:"path"`
+	Library bool   `yaml:"library"`
+	Image   string `yaml:"image"`
+}
+
+// orderedComponents is the components map with its document order preserved,
+// since that order is the release order for `all`.
+type orderedComponents struct {
+	Names []string
+	Specs map[string]componentSpec
+}
+
+func (o *orderedComponents) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("components must be a mapping")
+	}
+	o.Specs = map[string]componentSpec{}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		name := node.Content[i].Value
+		var spec componentSpec
+		if err := node.Content[i+1].Decode(&spec); err != nil {
+			return fmt.Errorf("component %q: %w", name, err)
+		}
+		o.Names = append(o.Names, name)
+		o.Specs[name] = spec
+	}
+	return nil
+}
+
 // loadRegistry reads ocm/components.yaml from the repository root.
 func loadRegistry() error {
 	root, err := gitOut("rev-parse", "--show-toplevel")
@@ -66,36 +103,16 @@ func loadRegistry() error {
 		return fmt.Errorf("reading %s: %w", path, err)
 	}
 
-	// Decode into a node to keep the document order of the components map.
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	var reg registry
+	if err := yaml.Unmarshal(data, &reg); err != nil {
 		return fmt.Errorf("parsing %s: %w", path, err)
 	}
-	var root_ *yaml.Node
-	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
-		root_ = doc.Content[0]
-	}
-	var compsNode *yaml.Node
-	if root_ != nil && root_.Kind == yaml.MappingNode {
-		for i := 0; i+1 < len(root_.Content); i += 2 {
-			if root_.Content[i].Value == "components" {
-				compsNode = root_.Content[i+1]
-			}
-		}
-	}
-	if compsNode == nil || compsNode.Kind != yaml.MappingNode {
-		return fmt.Errorf("%s: no 'components' mapping found", path)
+	if len(reg.Components.Names) == 0 {
+		return fmt.Errorf("%s: no components defined", path)
 	}
 
-	for i := 0; i+1 < len(compsNode.Content); i += 2 {
-		name := compsNode.Content[i].Value
-		var spec struct {
-			Library bool   `yaml:"library"`
-			Image   string `yaml:"image"`
-		}
-		if err := compsNode.Content[i+1].Decode(&spec); err != nil {
-			return fmt.Errorf("%s: component %q: %w", path, name, err)
-		}
+	for _, name := range reg.Components.Names {
+		spec := reg.Components.Specs[name]
 		c := component{prefix: name + "/v", library: spec.Library}
 		if spec.Library {
 			c.triggers = "go-gettable module tag for go.platform-mesh.io/" + name + " (no image)"
@@ -105,9 +122,6 @@ func loadRegistry() error {
 		}
 		components[name] = c
 		componentOrder = append(componentOrder, name)
-	}
-	if len(componentOrder) == 0 {
-		return fmt.Errorf("%s: no components defined", path)
 	}
 	return nil
 }
