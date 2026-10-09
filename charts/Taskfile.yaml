@@ -38,7 +38,7 @@ env:
   CHARTS:
     sh: "printf '%s' $(ls -d charts/*/ | paste -sd ',' -)"
   CHANGED_CHARTS:
-    sh: "( git diff --name-only main..@ ; git diff --name-only ) | grep '^charts/' | cut -d/ -f1-2 | sort | uniq | paste -sd ',' -"
+    sh: "( git diff --name-only main..@ 2>/dev/null ; git diff --name-only ) | grep '^charts/' | cut -d/ -f1-2 | sort | uniq | paste -sd ',' - || true"
 
 tasks:
   setup:kube-lint:
@@ -55,7 +55,7 @@ tasks:
     internal: true
     deps: [setup:helm]
     cmds:
-      - "{{.HELM}} plugin list | grep -q '^unittest' || {{.HELM}} plugin install https://github.com/helm-unittest/helm-unittest --version {{.HELM_UNITTEST_VERSION}}"
+      - "{{.HELM}} plugin list | grep -q '^unittest' || {{.HELM}} plugin install https://github.com/helm-unittest/helm-unittest --version {{.HELM_UNITTEST_VERSION}} --verify=false"
 
   # ct lint also checks that every changed chart (vs. TARGET_BRANCH) bumped its
   # version, which is what keeps published chart versions immutable. ct needs
@@ -66,7 +66,7 @@ tasks:
       TARGET_BRANCH: '{{.TARGET_BRANCH | default "main"}}'
     cmds:
       - "./hack/charts/lint-image-schema.sh"
-      - "{{.CT}} lint --target-branch {{.TARGET_BRANCH}} --chart-dirs=charts --validate-maintainers=false --chart-repos=bitnami=https://charts.bitnami.com/bitnami,openfga=https://openfga.github.io/helm-charts,prometheus-community=https://prometheus-community.github.io/helm-charts,open-telemetry=https://open-telemetry.github.io/opentelemetry-helm-charts"
+      - "{{.CT}} lint --config charts/.ct/ct.yaml --target-branch {{.TARGET_BRANCH}}"
   helmtest:
     deps: [setup:helm-unittest]
     cmds:

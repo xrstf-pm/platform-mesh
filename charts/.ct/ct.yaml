@@ -1,0 +1,14 @@
+# chart-testing (ct) configuration, used by `task charts:lint`.
+# chart_schema.yaml and lintconf.yaml are ct's defaults, copied from the
+# release matching CT_VERSION in tools/Taskfile.yaml (ct does not ship them in
+# the binary).
+chart-dirs:
+  - charts
+validate-maintainers: false
+chart-yaml-schema: charts/.ct/chart_schema.yaml
+lint-conf: charts/.ct/lintconf.yaml
+chart-repos:
+  - bitnami=https://charts.bitnami.com/bitnami
+  - openfga=https://openfga.github.io/helm-charts
+  - prometheus-community=https://prometheus-community.github.io/helm-charts
+  - open-telemetry=https://open-telemetry.github.io/opentelemetry-helm-charts
