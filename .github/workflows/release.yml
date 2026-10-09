@@ -59,6 +59,8 @@ jobs:
     permissions:
       contents: write # create the GitHub release
       packages: write # push charts and OCM components
+    outputs:
+      version: ${{ steps.v.outputs.version }}
     env:
       OCM_REPO: ghcr.io/${{ github.repository_owner }}
       # The signature name must equal the CN of the signing certificate.
@@ -141,5 +143,73 @@ jobs:
           set -euo pipefail
           flags=(--title "Platform Mesh ${TAG#v}" --notes-file release-notes.md --verify-tag)
           [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
-          gh release create "$TAG" "${flags[@]}" \
-            ocm/.generated/constructor.yaml#component-constructor.yaml
+          cp ocm/.generated/constructor.yaml component-constructor.yaml
+          gh release create "$TAG" "${flags[@]}" component-constructor.yaml
+
+  # ──────────────────────────────────────────────
+  # Check the published result the way a consumer would see it.
+  # ──────────────────────────────────────────────
+  verify:
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    env:
+      OCM_REPO: ghcr.io/${{ github.repository_owner }}
+      COMPONENT: github.com/platform-mesh/platform-mesh
+      SIGNATURE: ${{ vars.OCM_SIGNATURE_NAME || 'platform-mesh.platform-mesh' }}
+      VERSION: ${{ needs.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          curl -LsSf -o /usr/local/bin/ocm \
+            "https://github.com/open-component-model/open-component-model/releases/download/${OCM_CLI_VERSION}/ocm-linux-amd64"
+          chmod +x /usr/local/bin/ocm
+          curl -LsSf "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
+      - name: Registry credentials (public key only, no signing key)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
+        run: |
+          set -euo pipefail
+          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          OCM_SIGNING_PRIVATE_KEY=unused hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" \
+            | yq 'del(.configurations[].consumers[].credentials[].properties.private_key_pem)' > "$HOME/.ocmconfig"
+      - name: Component graph
+        run: |
+          set -euo pipefail
+          ocm get component-version "$OCM_REPO//$COMPONENT:$VERSION" --recursive -o yaml > graph.yaml
+          {
+            echo "### Component graph of \`$COMPONENT:$VERSION\`"
+            echo '```'
+            ocm get component-version "$OCM_REPO//$COMPONENT:$VERSION" --recursive
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Signatures
+        run: |
+          set -euo pipefail
+          # Every component in the graph carrying our signature must verify
+          # (the aggregate and everything published from this repository).
+          yq -r '.[] | select([.signatures[]?.name] | contains([env(SIGNATURE)])) | .component.name + ":" + .component.version' graph.yaml \
+            | sort -u | while read -r cv; do
+                ocm verify component-version --signature "$SIGNATURE" "$OCM_REPO//$cv" >/dev/null
+                echo "verified $cv"
+              done
+          grep -q "^$COMPONENT:$VERSION\$" <(yq -r '.[] | select([.signatures[]?.name] | contains([env(SIGNATURE)])) | .component.name + ":" + .component.version' graph.yaml) \
+            || { echo "::error::aggregate is not signed with $SIGNATURE"; exit 1; }
+      - name: Charts are installable
+        run: |
+          set -euo pipefail
+          for chart in account-operator infra common; do
+            v="$(yq '.version' "charts/$chart/Chart.yaml")"
+            helm pull "oci://$OCM_REPO/platform-mesh/$chart" --version "$v" --destination /tmp
+            [ "$chart" = common ] || helm template "/tmp/$chart-$v.tgz" >/dev/null
+            echo "ok: $chart $v"
+          done

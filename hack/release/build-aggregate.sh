@@ -315,25 +315,30 @@ while IFS=$'\t' read -r cname cver; do
     new_components+=("$cname:$cver")
     continue
   fi
-  want="$(jq -c --arg n "$cname" --arg v "$cver" '.components[] | select(.name == $n and .version == $v)
-    | {res: ([.resources[]? | {name, version}] | sort_by(.name)), refs: ([.componentReferences[]? | {name, componentName, version}] | sort_by(.name))}' <<<"$generated")"
-  have="$(ocm get component-version "$OCM_REPO//$cname:$cver" -o json | jq -c '(if type == "array" then .[0] else . end) | .component
-    | {res: ([.resources[]? | {name, version}] | sort_by(.name)), refs: ([.componentReferences[]? | {name, componentName, version}] | sort_by(.name))}')"
+  shape='{res: ([.resources[]? | {name, version}] | sort_by(.name)),
+          refs: ([.componentReferences[]? | {name, componentName, version}] | sort_by(.name)),
+          src: ([.sources[]? | {name, commit: .access.commit}] | sort_by(.name))}'
+  want="$(jq -c --arg n "$cname" --arg v "$cver" ".components[] | select(.name == \$n and .version == \$v) | $shape" <<<"$generated")"
+  have="$(ocm get component-version "$OCM_REPO//$cname:$cver" -o json | jq -c "(if type == \"array\" then .[0] else . end) | .component | $shape")"
   if [[ "$want" != "$have" ]]; then
     echo "error: $cname:$cver already exists in $OCM_REPO with different content:" >&2
     diff <(jq . <<<"$have") <(jq . <<<"$want") | sed 's/^/    /' >&2 || true
-    case "$cname" in
-      github.com/platform-mesh/helm-charts/*|github.com/platform-mesh/images/*) echo "    -> bump the chart version in charts/${cname##*/}/Chart.yaml" >&2 ;;
-      github.com/platform-mesh/*) echo "    -> bump the chart version in charts/${cname##*/}/Chart.yaml" >&2 ;;
-      *) echo "    -> bump the PM_* version of this wrapper in ocm/versions.yaml" >&2 ;;
-    esac
+    if [[ "$cname" == "$COMPONENT" ]]; then
+      echo "    -> $VERSION was already released from a different commit; use a new version" >&2
+    elif [[ "$cname" == github.com/platform-mesh/* ]]; then
+      echo "    -> bump the chart version in charts/${cname##*/}/Chart.yaml" >&2
+    else
+      echo "    -> bump the PM_* version of this wrapper in ocm/versions.yaml" >&2
+    fi
     conflicts=$((conflicts + 1))
   fi
 done < <(jq -r '.components[] | [.name, .version] | @tsv' <<<"$generated")
 [[ $conflicts -eq 0 ]] || exit 1
 
-if cv_exists "$OCM_REPO" "$COMPONENT" "$VERSION" && [[ -z "$CTF" ]]; then
-  die "$COMPONENT:$VERSION already exists in $OCM_REPO"
+if [[ ${#new_components[@]} -eq 0 ]]; then
+  log "$COMPONENT:$VERSION and everything it references are already published; nothing to do"
+  : > "$(dirname "$OUTPUT")/published.txt"
+  exit 0
 fi
 
 # ---------------------------------------------------------------------------
