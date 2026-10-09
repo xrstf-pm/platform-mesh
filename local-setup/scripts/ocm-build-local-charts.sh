@@ -1,7 +1,8 @@
 #!/bin/bash
 
-# OCM Build Local Charts Script
-# Builds local helm charts and pushes them to the local OCI registry
+# Packages every chart under charts/ from the working tree and pushes it to the
+# kind cluster's OCI registry (via the ocm-transfer-pod). Sourced by
+# ocm-build-component.sh, which afterwards builds the OCM components for them.
 
 set -e
 
@@ -18,26 +19,6 @@ OCM_DIR="${OCM_DIR:-$PROJECT_ROOT/ocm}"
 PRERELEASE_DIR="${PRERELEASE_DIR:-$PROJECT_ROOT/prerelease}"
 
 # Local charts to build (component-name:chart-path)
-CUSTOM_LOCAL_COMPONENTS_CHART_PATHS=(
-    "account-operator:charts/account-operator"
-    "example-httpbin-operator:charts/example-httpbin-operator"
-    "extension-manager-operator:charts/extension-manager-operator"
-    "gateway-api-crds:charts/gateway-api-crds"
-    "iam-service:charts/iam-service"
-    "iam-ui:charts/iam-ui"
-    "infra:charts/infra"
-    "keycloak-operator:charts/keycloak-operator"
-    "kro-composition-operator:charts/kro-composition-operator"
-    "kubernetes-graphql-gateway:charts/kubernetes-graphql-gateway"
-    "marketplace-ui:charts/marketplace-ui"
-    "observability:charts/observability"
-    "platform-mesh-operator:charts/platform-mesh-operator"
-    "portal:charts/portal"
-    "rebac-authz-webhook:charts/rebac-authz-webhook"
-    "security-operator:charts/security-operator"
-    "terminal-controller-manager:charts/terminal-controller-manager"
-    "virtual-workspaces:charts/virtual-workspaces"
-)
 
 # Color output (respect NO_COLOR env var)
 if [ -z "$NO_COLOR" ]; then
@@ -89,49 +70,17 @@ swap_common_to_local() {
     return 1  # no swap needed
 }
 
-# Copy constructor templates to transfer pod
-copy_templates_to_pod() {
-    echo -e "${COL}[$(date '+%H:%M:%S')] Copying OCM constructor templates to transfer pod...${COL_RES}"
-    for template in "$OCM_DIR"/component-constructor*.yaml; do
-        kubectl cp "$template" -n default ocm-transfer-pod:.ocm/"$(basename "$template")"
-    done
-}
 
 # Configuration for parallel execution
 MAX_PARALLEL=${MAX_PARALLEL:-8}
 CONCURRENT=${CONCURRENT:-false}
 
-# Phase 1: Prepare chart and push to OCI registry (can run in parallel)
-# This function handles steps 1-5: copy, swap, package, push to OCI
-# Writes metadata to a temp file for phase 2
+# Package one chart from the working tree and push it to the local registry.
 prepare_and_push_chart() {
     local comp="$1"
-    local chart_dir="$2"
-    local meta_file="$PRERELEASE_DIR/$comp.meta"
+    local chart_dir="charts/$comp"
 
-    echo -e "${COL}[$(date '+%H:%M:%S')] [Phase 1] Processing $chart_dir${COL_RES}"
-
-    # Get component name from prerelease constructor
-    local component_name
-    component_name=$(yq -r ".components[] | select(.name == \"github.com/platform-mesh/prerelease\") | .componentReferences[] | select(.name == \"$comp\") | .componentName" "$OCM_DIR/component-constructor-prerelease.yaml" 2>/dev/null || true)
-
-    if [ -z "$component_name" ]; then
-        echo -e "${COL}[$(date '+%H:%M:%S')] Skipping $comp - not found in component-constructor-prerelease.yaml${COL_RES}"
-        # Write skip marker
-        echo "SKIP=true" > "$meta_file"
-        return 0
-    fi
-
-    echo -e "${COL}[$(date '+%H:%M:%S')] Component: $component_name (chart dir: $chart_dir)${COL_RES}"
-
-    # Get chart version and app version from original chart
-    local chart_version app_version
-    chart_version=$(grep '^version:' "$PROJECT_ROOT/$chart_dir/Chart.yaml" | sed 's/^version: //')
-    if [ -z "$chart_version" ]; then
-        echo -e "${RED}Failed to read version for $component_name${COL_RES}" >&2
-        return 1
-    fi
-    app_version=$(yq -r '.appVersion // ""' "$PROJECT_ROOT/$chart_dir/Chart.yaml" 2>/dev/null || true)
+    echo -e "${COL}[$(date '+%H:%M:%S')] Processing $chart_dir${COL_RES}"
 
     # Copy chart to prerelease directory to avoid modifying the original
     local prerelease_chart_dir="$PRERELEASE_DIR/$comp"
@@ -141,122 +90,23 @@ prepare_and_push_chart() {
     # Swap common chart reference to local in the copied chart (if it has the dependency)
     swap_common_to_local "$prerelease_chart_dir" || true
 
-    # Package the chart from the prerelease copy
     local out tarball
     out=$(helm package "$prerelease_chart_dir" -d "$PRERELEASE_DIR")
     tarball=$(echo "$out" | awk -F': ' '/saved it to:/ {print $2}')
-
     if [ ! -f "$tarball" ]; then
-        echo -e "${RED}Failed to package $component_name${COL_RES}" >&2
+        echo -e "${RED}Failed to package $comp${COL_RES}" >&2
         return 1
     fi
 
-    # Push to local OCI registry
     echo -e "${COL}[$(date '+%H:%M:%S')] Pushing $tarball to local OCI registry...${COL_RES}"
     kubectl cp "$tarball" -n default ocm-transfer-pod:.
     kubectl exec $(get_kubectl_exec_flags) ocm-transfer-pod -- helm push "$(basename "$tarball")" oci://oci-registry-docker-registry.registry.svc.cluster.local/platform-mesh
-    echo -e "${COL}[$(date '+%H:%M:%S')] Pushed $tarball to local OCI registry${COL_RES}"
-
-    # Get image name and prepare variables
-    local image_name commit chart_oci_path local_chart_path
-    # Construct full image name from registry/repository
-    image_name=$(yq '.image.registry + "/" + .image.repository' "$PROJECT_ROOT/$chart_dir/values.yaml" 2>/dev/null || echo "")
-    commit=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
-    chart_oci_path="oci://oci-registry-docker-registry.registry.svc.cluster.local/platform-mesh/$comp"
-    local_chart_path="../$chart_dir"
-
-    # Write metadata to file for phase 2
-    cat > "$meta_file" << EOF
-SKIP=false
-VERSION=$chart_version
-APP_VERSION=$app_version
-IMAGE_NAME=$image_name
-COMMIT=$commit
-COMPONENT_NAME=$component_name
-CHART_OCI_PATH=$chart_oci_path
-LOCAL_CHART_PATH=$local_chart_path
-EOF
-
-    echo -e "${COL}[$(date '+%H:%M:%S')] [Phase 1] Done preparing: $comp${COL_RES}"
+    echo -e "${COL}[$(date '+%H:%M:%S')] Pushed $tarball${COL_RES}"
 }
 
-# Phase 2: Add chart directly to local OCI registry (must run sequentially)
-# Reads metadata from temp file written by phase 1
-add_chart_to_ctf() {
-    local comp="$1"
-    local meta_file="$PRERELEASE_DIR/$comp.meta"
-
-    # Check if metadata file exists
-    if [ ! -f "$meta_file" ]; then
-        echo -e "${RED}[Phase 2] Metadata file not found for $comp${COL_RES}" >&2
-        return 1
-    fi
-
-    # Source metadata
-    source "$meta_file"
-
-    # Check if this component should be skipped
-    if [ "$SKIP" = "true" ]; then
-        echo -e "${COL}[$(date '+%H:%M:%S')] [Phase 2] Skipping $comp${COL_RES}"
-        return 0
-    fi
-
-    echo -e "${COL}[$(date '+%H:%M:%S')] [Phase 2] Adding component: $COMPONENT_NAME version $VERSION${COL_RES}"
-
-    # Determine which constructor template to use:
-    # 1. Component-specific constructor (e.g. component-constructor-example-httpbin-operator.yaml) takes priority,
-    #    but only if it has no 'input:' blocks — constructors with input blocks reference local files that only
-    #    exist in CI/CD (e.g. component-constructor-platform-mesh-operator.yaml embeds a local rgd blob).
-    #    Also skip component-specific constructors that reference external components not pre-populated
-    #    in the local OCI registry: v2 resolves componentReferences during graph discovery and fails if they're absent.
-    #    Known pre-populated externals (ingress-nginx, kcp-div/*) are allowed through.
-    # 2. Chart-only constructor for components without an image
-    # 3. Generic constructor as fallback
-    local constructor
-    local specific="$OCM_DIR/component-constructor-${comp}.yaml"
-    local has_external_refs=false
-    if [ -f "$specific" ]; then
-        # External = non-platform-mesh AND not one of the known pre-populated third-party components
-        if grep -v \
-            -e 'componentName:.*github\.com/platform-mesh/' \
-            -e 'componentName:.*github\.com/kcp-dev/' \
-            -e 'componentName:.*github\.com/kubernetes-sigs/' \
-            -e 'componentName:.*github\.com/kubernetes/' \
-            "$specific" | grep -q 'componentName:'; then
-            has_external_refs=true
-        fi
-    fi
-    if [ -f "$specific" ] && ! grep -q '^\s*input:' "$specific" && [ "$has_external_refs" = "false" ]; then
-        constructor="ocm/component-constructor-${comp}.yaml"
-        echo -e "${COL}[$(date '+%H:%M:%S')] [Phase 2] Using component-specific constructor for $comp${COL_RES}"
-    elif [ "$APP_VERSION" == "0.0.0" ] || [ -z "$IMAGE_NAME" ]; then
-        constructor="ocm/component-constructor-chart-only-prerelease.yaml"
-    else
-        constructor="ocm/component-constructor-local-prerelease.yaml"
-    fi
-
-    # Add component to OCM transport archive
-    kubectl exec $(get_kubectl_exec_flags) ocm-transfer-pod -- \
-        env \
-        VERSION="$VERSION" \
-        APP_VERSION="$APP_VERSION" \
-        IMAGE_NAME="$IMAGE_NAME" \
-        IMAGE_REPO="$COMPONENT_NAME" \
-        COMMIT="$COMMIT" \
-        IMAGE_REPO_SHA="$COMMIT" \
-        CHART_REPO="$COMPONENT_NAME" \
-        COMPONENT_NAME="$COMPONENT_NAME" \
-        COMPONENT_SHORT_NAME="$comp" \
-        CHART_OCI_PATH="$CHART_OCI_PATH" \
-        LOCAL_CHART_PATH="$LOCAL_CHART_PATH" \
-        ocm add component-versions --component-version-conflict-policy replace --repository "oci-registry-docker-registry.registry.svc.cluster.local/platform-mesh" --constructor "$constructor"
-
-    echo -e "${COL}[$(date '+%H:%M:%S')] [Phase 2] Done: $COMPONENT_NAME${COL_RES}"
-}
-
-# Build all local charts using two-phase parallel approach
+# Package and push all charts (in parallel with CONCURRENT=true)
 build_local_charts() {
-    echo -e "${COL}[$(date '+%H:%M:%S')] Building custom local charts...${COL_RES}"
+    echo -e "${COL}[$(date '+%H:%M:%S')] Packaging and pushing charts from the working tree...${COL_RES}"
 
     # Ensure kubeconfig is set
     kind export kubeconfig -n platform-mesh
@@ -264,7 +114,14 @@ build_local_charts() {
     # Create prerelease directory
     mkdir -p "$PRERELEASE_DIR"
     rm -f "$PRERELEASE_DIR"/*.tgz
-    rm -f "$PRERELEASE_DIR"/*.meta
+
+    local charts=()
+    for f in "$PROJECT_ROOT"/charts/*/Chart.yaml; do
+        local name
+        name="$(basename "$(dirname "$f")")"
+        [ "$name" = common ] && continue  # dependency only, bundled into the others
+        charts+=("$name")
+    done
 
     # Copy common chart to prerelease directory (used as dependency by other charts)
     rm -rf "$PRERELEASE_DIR/common"
@@ -274,14 +131,11 @@ build_local_charts() {
     setup_ocm_cli
     export_ocm_path
 
-    # Copy templates to pod
-    copy_templates_to_pod
-
     # Phase 1: Prepare and push all charts
     local failed=0
 
     if [ "$CONCURRENT" = "true" ]; then
-        echo -e "${COL}[$(date '+%H:%M:%S')] === Phase 1: Preparing and pushing charts (parallel, max $MAX_PARALLEL concurrent) ===${COL_RES}"
+        echo -e "${COL}[$(date '+%H:%M:%S')] Packaging charts (parallel, max $MAX_PARALLEL concurrent)${COL_RES}"
         local running=0
         local pids=()
 
@@ -309,32 +163,22 @@ build_local_charts() {
             fi
         done
     else
-        echo -e "${COL}[$(date '+%H:%M:%S')] === Phase 1: Preparing and pushing charts (sequential) ===${COL_RES}"
-        for pair in "${CUSTOM_LOCAL_COMPONENTS_CHART_PATHS[@]}"; do
-            local comp="${pair%%:*}"
-            local chart_dir="${pair#*:}"
-
-            if ! prepare_and_push_chart "$comp" "$chart_dir"; then
+        echo -e "${COL}[$(date '+%H:%M:%S')] Packaging charts (sequential)${COL_RES}"
+        for comp in "${charts[@]}"; do
+            if ! prepare_and_push_chart "$comp"; then
                 failed=$((failed + 1))
             fi
         done
     fi
 
     if ((failed > 0)); then
-        echo -e "${RED}[$(date '+%H:%M:%S')] Phase 1 completed with $failed failures${COL_RES}" >&2
+        echo -e "${RED}[$(date '+%H:%M:%S')] $failed chart(s) failed${COL_RES}" >&2
         return 1
     fi
-    echo -e "${COL}[$(date '+%H:%M:%S')] Phase 1 completed successfully${COL_RES}"
+    echo -e "${COL}[$(date '+%H:%M:%S')] All charts packaged and pushed${COL_RES}"
 
     # Phase 2: Add all components to local OCI registry sequentially
-    echo -e "${COL}[$(date '+%H:%M:%S')] === Phase 2: Adding components to local OCI registry (sequential) ===${COL_RES}"
-    for pair in "${CUSTOM_LOCAL_COMPONENTS_CHART_PATHS[@]}"; do
-        local comp="${pair%%:*}"
-        add_chart_to_ctf "$comp"
-    done
-    echo -e "${COL}[$(date '+%H:%M:%S')] Phase 2 completed successfully${COL_RES}"
-
-    echo -e "${COL}[$(date '+%H:%M:%S')] Completed building custom local charts${COL_RES}"
+    echo -e "${COL}[$(date '+%H:%M:%S')] All charts pushed${COL_RES}"
 }
 
 # Main function
