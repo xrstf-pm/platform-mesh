@@ -1,0 +1,47 @@
+# Copyright The Platform Mesh Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: local-setup tools
+description: Installs the tools local-setup needs on a runner (gh, task, kubectl kcp plugins, ocm, helm).
+inputs:
+  repo-token:
+    description: GitHub token for tool downloads
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: ksivamuthu/actions-setup-gh-cli@c78dbed4be2f8d6133a14a9a597ee12fd4ed5c93 # v3
+      with:
+        version: 2.24.3
+    - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+      with:
+        version: 3.44.1
+        repo-token: ${{ inputs.repo-token }}
+    - name: Install kubectl kcp plugins
+      shell: bash
+      run: |
+        set -euo pipefail
+        ( cd "$(mktemp -d)" && curl -fsSLO "https://github.com/kubernetes-sigs/krew/releases/latest/download/krew-linux_amd64.tar.gz" && tar zxf krew-linux_amd64.tar.gz && KREW_ROOT="$HOME/.krew" ./krew-linux_amd64 install krew )
+        echo "$HOME/.krew/bin" >> "$GITHUB_PATH"
+        export PATH="$HOME/.krew/bin:$PATH"
+        kubectl krew index add kcp-dev https://github.com/kcp-dev/krew-index.git
+        kubectl krew install kcp-dev/kcp kcp-dev/ws kcp-dev/create-workspace oidc-login
+    - name: Install OCM CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        # renovate: datasource=github-releases depName=open-component-model/open-component-model
+        version=v0.13.0
+        curl -LsSf -o /usr/local/bin/ocm "https://github.com/open-component-model/open-component-model/releases/download/${version}/ocm-linux-amd64"
+        chmod +x /usr/local/bin/ocm
