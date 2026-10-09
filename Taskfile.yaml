@@ -37,6 +37,15 @@ includes:
   tools:
     taskfile: tools/Taskfile.yaml
     dir: .
+  # Helm charts: `task charts:lint`, `task charts:test`, `task charts:docs`, ...
+  charts:
+    taskfile: charts/Taskfile.yaml
+    dir: .
+  # kind-based local environment and its e2e tests: `task local-setup:start`,
+  # `task local-setup:test:portal-e2e`, `task local-setup:ocm:build`, ...
+  local-setup:
+    taskfile: local-setup/Taskfile.yaml
+    dir: .
 
 vars:
   COMPONENTS:

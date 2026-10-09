@@ -16,7 +16,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/ocm-setup.sh"
 
 LOCAL_BIN="${LOCAL_BIN:-$PROJECT_ROOT/bin}"
-OCM_DIR="${OCM_DIR:-$PROJECT_ROOT/.ocm}"
+OCM_DIR="${OCM_DIR:-$PROJECT_ROOT/ocm}"
 
 setup_ocm_cli >/dev/null
 export_ocm_path

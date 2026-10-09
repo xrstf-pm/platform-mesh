@@ -14,7 +14,7 @@ source "$SCRIPT_DIR/ocm-setup.sh"
 
 # Configuration
 LOCAL_BIN="${LOCAL_BIN:-$PROJECT_ROOT/bin}"
-OCM_DIR="${OCM_DIR:-$PROJECT_ROOT/.ocm}"
+OCM_DIR="${OCM_DIR:-$PROJECT_ROOT/ocm}"
 PRERELEASE_DIR="${PRERELEASE_DIR:-$PROJECT_ROOT/prerelease}"
 
 # Local charts to build (component-name:chart-path)
@@ -227,12 +227,12 @@ add_chart_to_ctf() {
         fi
     fi
     if [ -f "$specific" ] && ! grep -q '^\s*input:' "$specific" && [ "$has_external_refs" = "false" ]; then
-        constructor=".ocm/component-constructor-${comp}.yaml"
+        constructor="ocm/component-constructor-${comp}.yaml"
         echo -e "${COL}[$(date '+%H:%M:%S')] [Phase 2] Using component-specific constructor for $comp${COL_RES}"
     elif [ "$APP_VERSION" == "0.0.0" ] || [ -z "$IMAGE_NAME" ]; then
-        constructor=".ocm/component-constructor-chart-only-prerelease.yaml"
+        constructor="ocm/component-constructor-chart-only-prerelease.yaml"
     else
-        constructor=".ocm/component-constructor-local-prerelease.yaml"
+        constructor="ocm/component-constructor-local-prerelease.yaml"
     fi
 
     # Add component to OCM transport archive

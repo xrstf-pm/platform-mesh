@@ -20,7 +20,7 @@ source "$SCRIPT_DIR/ocm-build-local-charts.sh"
 
 # Configuration
 LOCAL_BIN="${LOCAL_BIN:-$PROJECT_ROOT/bin}"
-OCM_DIR="${OCM_DIR:-$PROJECT_ROOT/.ocm}"
+OCM_DIR="${OCM_DIR:-$PROJECT_ROOT/ocm}"
 COMPONENT_PRERELEASE_VERSION="${COMPONENT_PRERELEASE_VERSION:-1.0.0}"
 
 # Remote registries
@@ -159,8 +159,8 @@ resolve_component_versions() {
 
     echo -e "${COL}[$(date '+%H:%M:%S')] Resolving third-party component versions...${COL_RES}"
 
-    # Third-party version pins live in .github/workflows/ocm-aggregator.yaml's env block.
-    local agg="$PROJECT_ROOT/.github/workflows/ocm-aggregator.yaml"
+    # Third-party version pins live in .github/workflows-helm-charts/ocm-aggregator.yaml (TEMPORARY: moves to ocm/versions.yaml)'s env block.
+    local agg="$PROJECT_ROOT/.github/workflows-helm-charts/ocm-aggregator.yaml"
     export KCP_OPERATOR_CHART_VERSION=$(yq -r '.jobs.ocm.env.KCP_OPERATOR_CHART_VERSION' "$agg")
     export KCP_OPERATOR_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.KCP_OPERATOR_IMAGE_VERSION' "$agg")
     export KCP_VERSION=$(yq -r '.jobs.ocm.env.KCP_VERSION' "$agg")
@@ -346,7 +346,7 @@ build_component() {
     # Export version pins needed by prefill_ctf before build_local_charts runs.
     # The full set is exported later in resolve_component_versions; these are
     # needed early because prefill_ctf must run before Phase 2 of build_local_charts.
-    local agg="$PROJECT_ROOT/.github/workflows/ocm-aggregator.yaml"
+    local agg="$PROJECT_ROOT/.github/workflows-helm-charts/ocm-aggregator.yaml"
     export API_SYNCAGENT_CHART_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_CHART_VERSION' "$agg")
     export API_SYNCAGENT_IMAGE_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_IMAGE_VERSION' "$agg")
     export API_SYNCAGENT_COMPONENT_VERSION=$(yq -r '.jobs.ocm.env.API_SYNCAGENT_COMPONENT_VERSION' "$agg")

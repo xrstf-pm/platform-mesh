@@ -96,13 +96,9 @@ Profiles are independent feature layers, not an ordered ladder — each only eve
 | `auth` | the ReBAC authorization webhook secret on kcp (L3) |
 | `full` | shorthand for all of the above |
 
-### Working against local checkouts
+### Charts
 
-The Helm charts are fetched remotely by default. Point them at a local clone to work offline or to hack on them:
-
-```sh
-export HELM_CHARTS_DIR=$HOME/go/src/github.com/platform-mesh/helm-charts
-```
+The Helm charts live in [`charts/`](charts) and are rendered from there directly, so chart changes are picked up live. Set `TILT_CHARTS_FROM_OCI=1` to pull the pinned published versions instead, or `HELM_CHARTS_DIR` to use another checkout.
 
 kcp needs no such override: it is built in-cluster from a `PlatformMesh` rather than fetched, so there is nothing external to pin.
 
