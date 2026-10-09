@@ -48,12 +48,17 @@
 #   --output FILE       where to write the generated constructor
 #                       (default ocm/.generated/constructor.yaml)
 #
-# Requires: yq (v4), jq, helm, ocm (v2). For publishing, `helm registry login`
-# and an ocm config with registry credentials must be set up.
+# Requires: task and jq; ocm, helm and yq are installed in their pinned versions
+# via `task tools:release` (set RELEASE_TOOLS_FROM_PATH=true to use the ones on
+# PATH instead). For publishing, `helm registry login` and an ocm config with
+# registry credentials must be set up.
 
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
+# Pinned ocm/helm/yq (tools/Taskfile.yaml), installed on demand.
+source hack/release/tools.sh
 
 VERSION=""
 COMPONENT="github.com/platform-mesh/platform-mesh"

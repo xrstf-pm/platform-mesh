@@ -48,12 +48,6 @@ concurrency:
   group: prerelease
   cancel-in-progress: false
 
-env:
-  # renovate: datasource=github-releases depName=open-component-model/open-component-model
-  OCM_CLI_VERSION: v0.13.0
-  # renovate: datasource=github-releases depName=helm/helm
-  HELM_VERSION: v4.2.3
-
 jobs:
   prerelease:
     runs-on: ubuntu-latest
@@ -82,14 +76,13 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Publishing prerelease $version from $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Install tools
+      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install release tooling (ocm, helm, yq; versions from tools/Taskfile.yaml)
         run: |
-          set -euo pipefail
-          curl -LsSf -o /usr/local/bin/ocm \
-            "https://github.com/open-component-model/open-component-model/releases/download/${OCM_CLI_VERSION}/ocm-linux-amd64"
-          chmod +x /usr/local/bin/ocm
-          curl -LsSf "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" | tar xz -C /tmp
-          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
+          task tools:release
+          echo "$PWD/bin/release" >> "$GITHUB_PATH"
           pip3 install --quiet pyyaml
 
       - name: Registry credentials

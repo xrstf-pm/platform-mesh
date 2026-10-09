@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Generates per-component signing certificates signed by the CA.
-# Requires the CA to exist (run ./hack/ocm/generate-signing-ca.sh first).
+# Requires the CA to exist (run ./hack/release/generate-signing-ca.sh first).
 #
 # Usage:
-#   ./hack/ocm/generate-signing-keys.sh              # regenerate all component certs
-#   ./hack/ocm/generate-signing-keys.sh my-component  # generate a single component cert
+#   ./hack/release/generate-signing-keys.sh              # regenerate all component certs
+#   ./hack/release/generate-signing-keys.sh my-component  # generate a single component cert
 #
 # Output:
 #   .secrets/<name>.priv   Component private key
@@ -67,7 +67,7 @@ generate_component_cert() {
 main() {
   if [[ ! -f "${CA_DIR}/ca.priv" || ! -f "${CA_DIR}/ca.cert" ]]; then
     echo "Error: CA not found at ${CA_DIR}." >&2
-    echo "Run ./hack/ocm/generate-signing-ca.sh first." >&2
+    echo "Run ./hack/release/generate-signing-ca.sh first." >&2
     exit 1
   fi
 

@@ -5,8 +5,8 @@ set -euo pipefail
 # Requires: gh CLI authenticated with sufficient permissions.
 #
 # Usage:
-#   ./hack/ocm/upload-signing-secrets.sh              # upload all component secrets
-#   ./hack/ocm/upload-signing-secrets.sh my-component  # upload a single component's secrets
+#   ./hack/release/upload-signing-secrets.sh              # upload all component secrets
+#   ./hack/release/upload-signing-secrets.sh my-component  # upload a single component's secrets
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"

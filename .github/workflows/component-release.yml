@@ -47,10 +47,6 @@ concurrency:
   group: component-release-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  # renovate: datasource=github-releases depName=open-component-model/open-component-model
-  OCM_CLI_VERSION: v0.13.0
-
 jobs:
   # ──────────────────────────────────────────────
   # Resolve the tag to a component from ocm/components.yaml.
@@ -308,12 +304,13 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: sbom
-      - name: Install OCM CLI
+      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install release tooling (ocm, helm, yq; versions from tools/Taskfile.yaml)
         run: |
-          curl -LsSf -o /usr/local/bin/ocm \
-            "https://github.com/open-component-model/open-component-model/releases/download/${OCM_CLI_VERSION}/ocm-linux-amd64"
-          chmod +x /usr/local/bin/ocm
-          ocm version
+          task tools:release
+          echo "$PWD/bin/release" >> "$GITHUB_PATH"
       - name: Write OCM config (registry credentials + signing key)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

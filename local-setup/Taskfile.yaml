@@ -31,7 +31,7 @@ tasks:
   setup:ocm:
     internal: true
     cmds:
-      - ./local-setup/scripts/ocm-setup.sh
+      - task: tools:release
 
   ocm:deploy:ociregistry:
     internal: true

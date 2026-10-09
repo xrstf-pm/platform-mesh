@@ -18,13 +18,7 @@ It leverages Flux and Kustomize to manage the cluster and deploy Platform Mesh c
 - **base64**: Required for encoding/decoding operations (standard Unix utility, typically pre-installed)
 - **mkcert**: For generating local SSL certificates. [Installation](https://github.com/FiloSottile/mkcert?tab=readme-ov-file#installation)
 - **jq**: For parsing JSON output from OCM CLI commands during component builds. [Installation](https://jqlang.org/download/)
-- **yq**: For processing YAML files. [Installation](https://github.com/mikefarah/yq#install)
-
-### Optional Tools
-
-- **Task**: Task runner for executing project tasks. [Installation](https://taskfile.dev/installation/)
-  - Provides convenient command aliases (e.g., `task local-setup:start`)
-  - Not required - you can run scripts directly (see examples below)
+- **Task**: Task runner; also installs the pinned `ocm`, `helm` and `yq` versions into `bin/` on first use (`task tools:release`). [Installation](https://taskfile.dev/installation/)
 
 ### WSL2 + Windows mkcert Setup Guide
 

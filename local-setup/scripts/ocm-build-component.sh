@@ -25,7 +25,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-source "$SCRIPT_DIR/ocm-setup.sh"
+source "$PROJECT_ROOT/hack/release/tools.sh" # pinned ocm/helm/yq on PATH
 source "$SCRIPT_DIR/ocm-build-local-charts.sh"
 
 LOCAL_BIN="${LOCAL_BIN:-$PROJECT_ROOT/bin}"

@@ -37,11 +37,8 @@ runs:
         export PATH="$HOME/.krew/bin:$PATH"
         kubectl krew index add kcp-dev https://github.com/kcp-dev/krew-index.git
         kubectl krew install kcp-dev/kcp kcp-dev/ws kcp-dev/create-workspace oidc-login
-    - name: Install OCM CLI
+    - name: Install release tooling (ocm, helm, yq; versions from tools/Taskfile.yaml)
       shell: bash
       run: |
-        set -euo pipefail
-        # renovate: datasource=github-releases depName=open-component-model/open-component-model
-        version=v0.13.0
-        curl -LsSf -o /usr/local/bin/ocm "https://github.com/open-component-model/open-component-model/releases/download/${version}/ocm-linux-amd64"
-        chmod +x /usr/local/bin/ocm
+        task tools:release
+        echo "$PWD/bin/release" >> "$GITHUB_PATH"

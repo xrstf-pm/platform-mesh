@@ -132,6 +132,16 @@ rename them. The graph is generated from
 [`ocm/charts/<chart>.yaml`](../../ocm/charts/README.md) (per-chart
 deviations from the default shape).
 
+## Tooling
+
+The release scripts need `ocm` (the CLI from
+[open-component-model/open-component-model](https://github.com/open-component-model/open-component-model)),
+`helm` and `yq`. Their versions are pinned in `tools/Taskfile.yaml` and
+installed into `bin/` by `task tools:release`; `hack/release/tools.sh` runs
+that and puts `bin/release/` on `PATH`. The scripts source it, so the same
+versions are used locally and in the workflows. Set
+`RELEASE_TOOLS_FROM_PATH=true` to use whatever is on `PATH` instead.
+
 ## Verifying a release
 
 ```sh

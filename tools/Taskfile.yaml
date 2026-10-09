@@ -81,8 +81,21 @@ vars:
   OAPI_CODEGEN_VERSION: v2.7.1
   OAPI_CODEGEN: '{{.BIN}}/oapi-codegen-{{.OAPI_CODEGEN_VERSION}}'
 
-  OCM_VERSION: 0.24.0
+  # renovate: datasource=github-releases depName=open-component-model/open-component-model
+  OCM_VERSION: 0.13.0
   OCM: '{{.BIN}}/ocm-{{.OCM_VERSION}}'
+
+  # renovate: datasource=github-releases depName=helm/helm
+  HELM_VERSION: v4.2.3
+  HELM: '{{.BIN}}/helm-{{.HELM_VERSION}}'
+
+  # renovate: datasource=github-releases depName=mikefarah/yq
+  YQ_VERSION: v4.52.4
+  YQ: '{{.BIN}}/yq-{{.YQ_VERSION}}'
+
+  # Unversioned symlinks to the release tooling, for scripts that call plain
+  # `ocm`/`helm`/`yq`; see `tools:release` and hack/release/tools.sh.
+  RELEASE_BIN: '{{.BIN}}/release'
 
   OPENAPI_GEN_VERSION: d427ff9ee9ad05f5da435abbb7c5929cb713ac56 # most recent commit as of writing this
   OPENAPI_GEN: '{{.BIN}}/openapi-gen-{{.OPENAPI_GEN_VERSION}}'
@@ -218,15 +231,52 @@ tasks:
           source: 'https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F{VERSION}/kustomize_{VERSION}_{GOOS}_{GOARCH}.tar.gz'
           version: '{{ .KUSTOMIZE_VERSION }}'
           extractArg: kustomize
+  # The OCM CLI from github.com/open-component-model/open-component-model, the
+  # rewritten "v2" CLI that the release scripts and local-setup use. Not to be
+  # confused with the older github.com/open-component-model/ocm CLI (versions
+  # 0.2x), which has a different command syntax.
   ocm:
     internal: true
     cmds:
       - task: uget
         vars:
           tool: ocm
-          source: 'https://github.com/open-component-model/ocm/releases/download/v{VERSION}/ocm-{VERSION}-{GOOS}-{GOARCH}.tar.gz'
+          source: 'https://github.com/open-component-model/open-component-model/releases/download/v{VERSION}/ocm-{GOOS}-{GOARCH}'
           version: '{{ .OCM_VERSION }}'
-          extractArg: ocm
+          uncompressed: true
+          extractArg: 'ocm-*'
+  helm:
+    internal: true
+    cmds:
+      - task: uget
+        vars:
+          tool: helm
+          source: 'https://get.helm.sh/helm-{VERSION}-{GOOS}-{GOARCH}.tar.gz'
+          version: '{{ .HELM_VERSION }}'
+          extractArg: '*/helm'
+  yq:
+    internal: true
+    cmds:
+      - task: uget
+        vars:
+          tool: yq
+          source: 'https://github.com/mikefarah/yq/releases/download/{VERSION}/yq_{GOOS}_{GOARCH}'
+          version: '{{ .YQ_VERSION }}'
+          uncompressed: true
+          extractArg: 'yq_*'
+
+  # Tools used by hack/release/*.sh and the release workflows. Besides the
+  # versioned binaries this creates bin/release/{ocm,helm,yq} so the scripts
+  # can prepend that directory to PATH (hack/release/tools.sh does this).
+  release:
+    desc: Install the release tooling (ocm, helm, yq) into bin/release.
+    deps: [ocm, helm, yq]
+    silent: true
+    cmds:
+      - mkdir -p '{{.RELEASE_BIN}}'
+      - ln -sfn '{{.OCM}}' '{{.RELEASE_BIN}}/ocm'
+      - ln -sfn '{{.HELM}}' '{{.RELEASE_BIN}}/helm'
+      - ln -sfn '{{.YQ}}' '{{.RELEASE_BIN}}/yq'
   mkcert:
     internal: true
     cmds:
