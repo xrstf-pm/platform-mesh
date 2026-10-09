@@ -128,6 +128,12 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: published
+          path: ocm/.generated/published.txt
+          retention-days: 7
+
       - name: Release notes
         env:
           VERSION: ${{ steps.v.outputs.version }}
@@ -192,18 +198,20 @@ jobs:
             ocm get component-version "$OCM_REPO//$COMPONENT:$VERSION" --recursive
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: published
       - name: Signatures
         run: |
           set -euo pipefail
-          # Every component in the graph carrying our signature must verify
-          # (the aggregate and everything published from this repository).
-          yq -r '.[] | select([.signatures[]?.name] | contains([env(SIGNATURE)])) | .component.name + ":" + .component.version' graph.yaml \
-            | sort -u | while read -r cv; do
-                ocm verify component-version --signature "$SIGNATURE" "$OCM_REPO//$cv" >/dev/null
-                echo "verified $cv"
-              done
-          grep -q "^$COMPONENT:$VERSION\$" <(yq -r '.[] | select([.signatures[]?.name] | contains([env(SIGNATURE)])) | .component.name + ":" + .component.version' graph.yaml) \
-            || { echo "::error::aggregate is not signed with $SIGNATURE"; exit 1; }
+          # The aggregate and every component version this run published must
+          # verify with our certificate. Components published earlier (or
+          # mirrored from elsewhere) may carry signatures from other keys.
+          { echo "$COMPONENT:$VERSION"; cat published.txt; } | sort -u | while read -r cv; do
+            [ -n "$cv" ] || continue
+            ocm verify component-version --signature "$SIGNATURE" "$OCM_REPO//$cv" >/dev/null
+            echo "verified $cv"
+          done
       - name: Charts are installable
         run: |
           set -euo pipefail
