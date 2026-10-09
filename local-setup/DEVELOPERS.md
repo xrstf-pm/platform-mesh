@@ -48,7 +48,7 @@ This is the recommended approach for iterative development.
 After making chart changes on an already running setup, rebuild and redeploy:
 
 ```sh
-task ocm:build ocm:apply
+task local-setup:ocm:build local-setup:ocm:apply
 ```
 
 This builds a new OCM component with your changes and applies it to the cluster.
@@ -65,14 +65,14 @@ Edit `Taskfile.yaml` to configure:
 If you have a running local-setup with published components (`PLATFORM_MESH_VERSION=...`) and want to switch to a locally built component:
 
 ```sh
-task ocm:deploy           # Deploy OCM infrastructure (once)
-task ocm:build ocm:apply  # Build and deploy component
+task local-setup:ocm:deploy           # Deploy OCM infrastructure (once)
+task local-setup:ocm:build local-setup:ocm:apply  # Build and deploy component
 ```
 
 ## Cleanup
 
 ```sh
-task ocm:cleanup       # Remove transfer pod and temp files
+task local-setup:ocm:cleanup       # Remove transfer pod and temp files
 ```
 
 ## Infrastructure Architecture

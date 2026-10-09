@@ -23,7 +23,7 @@ It leverages Flux and Kustomize to manage the cluster and deploy Platform Mesh c
 ### Optional Tools
 
 - **Task**: Task runner for executing project tasks. [Installation](https://taskfile.dev/installation/)
-  - Provides convenient command aliases (e.g., `task local-setup`)
+  - Provides convenient command aliases (e.g., `task local-setup:start`)
   - Not required - you can run scripts directly (see examples below)
 
 ### WSL2 + Windows mkcert Setup Guide
@@ -108,14 +108,14 @@ The setup script automates the entire bootstrap process. By default, it uses the
 **Using Task (recommended):**
 
 ```sh
-task local-setup
+task local-setup:start
 ```
 
 The first run creates a fresh cluster. Subsequent runs reuse it and only rebuild/reapply the OCM component (`--iterate=true` is the default, so this is fast). To force a truly fresh cluster, delete the existing one first and pass `--iterate=false`:
 
 ```sh
 kind delete cluster --name platform-mesh
-task local-setup -- --iterate=false
+task local-setup:start -- --iterate=false
 ```
 
 **Without Task (direct script execution):**
@@ -133,7 +133,7 @@ This setup includes an example provider ("httpbin") to showcase how provider int
 **Using Task:**
 
 ```sh
-task local-setup -- --example-data
+task local-setup:start -- --example-data
 ```
 
 **Without Task:**
@@ -157,19 +157,27 @@ task local-setup -- --example-data
 **Released version:** For a stable environment based on an officially released version, checkout the appropriate git tag before running setup:
 
 ```sh
-git checkout 0.2.0  # or any released tag like 0.1.1, 0.2, etc.
-task local-setup
+git checkout v0.6.0  # or any release tag
+task local-setup:start
 ```
 
-**OCM aggregate version (`PLATFORM_MESH_VERSION` env var):** By default, `task local-setup` builds the OCM aggregate locally from the working tree and deploys it via an in-cluster OCI registry. To deploy a published aggregate from `ghcr.io/platform-mesh` instead, set `PLATFORM_MESH_VERSION` to the version you want:
+**OCM aggregate version (`PLATFORM_MESH_VERSION` env var):** By default, `task local-setup:start` builds the OCM aggregate locally from the working tree and deploys it via an in-cluster OCI registry. To deploy a published aggregate from `ghcr.io/platform-mesh` instead, set `PLATFORM_MESH_VERSION` to the version you want:
 
 ```sh
 # Build locally from the working tree (default)
-task local-setup
+task local-setup:start
 
 # Pull a specific published version from ghcr.io/platform-mesh
-PLATFORM_MESH_VERSION=0.4.0-build.510 task local-setup
+PLATFORM_MESH_VERSION=0.6.0 task local-setup:start
+
+# Pull a prerelease built from main (see the prerelease workflow's summary for the version)
+PLATFORM_MESH_VERSION=0.7.0-dev.42.g1a2b3c4 task local-setup:start
 ```
+
+When building from the working tree, the charts come from `charts/` as they are
+in your checkout; the component images are the versions pinned by each chart's
+`appVersion`. To test a locally built image, see
+[Load Custom Images Hook](#load-custom-images-hook) below.
 
 The build-locally path is useful for:
 
@@ -180,12 +188,12 @@ The build-locally path is useful for:
 **Note:** iterate mode doesn't support `PLATFORM_MESH_VERSION` (it only rebuilds from the working tree). This is transparent on a first run — there's no cluster yet, so it falls through to a full setup automatically. If a cluster already exists, though, pass `--iterate=false` explicitly:
 
 ```sh
-PLATFORM_MESH_VERSION=0.4.0-build.510 task local-setup -- --iterate=false
+PLATFORM_MESH_VERSION=0.6.0 task local-setup:start:start -- --iterate=false
 ```
 
 **Concurrent builds (--concurrent flag):** When using the `--concurrent` flag, chart builds run in parallel instead of sequentially. This speeds up the build process on multi-core systems.
 
-**Sharded kcp (default behavior):** By default, the setup deploys additional kcp shards alongside the root shard. This is useful for testing multi-shard topologies locally. Pass `--sharded=false` to run a single-shard setup instead (e.g., `task local-setup -- --sharded=false`).
+**Sharded kcp (default behavior):** By default, the setup deploys additional kcp shards alongside the root shard. This is useful for testing multi-shard topologies locally. Pass `--sharded=false` to run a single-shard setup instead (e.g., `task local-setup:start -- --sharded=false`).
 
 **Remote mode (--remote and --deployment-tech flags):** When using `--remote`, the setup creates two kind clusters instead of one: `platform-mesh-infra` (where Flux/ArgoCD and the platform-mesh-operator run) and `platform-mesh` (the runtime cluster where workloads, kcp and OCM resources land). The platform-mesh-operator routes HelmReleases/Applications to the infra cluster and OCM Resources to the runtime cluster, so this is a faithful local replica of a production split-cluster topology.
 
@@ -193,21 +201,21 @@ PLATFORM_MESH_VERSION=0.4.0-build.510 task local-setup -- --iterate=false
 
 ```sh
 # FluxCD on a two-cluster topology
-task local-setup -- --remote --deployment-tech=fluxcd
+task local-setup:start -- --remote --deployment-tech=fluxcd
 
 # ArgoCD on a two-cluster topology
-task local-setup -- --remote --deployment-tech=argocd
+task local-setup:start -- --remote --deployment-tech=argocd
 
 # With example provider data (httpbin); requires the kubectl-kcp plugin
-task local-setup -- --remote --deployment-tech=fluxcd --example-data
-task local-setup -- --remote --deployment-tech=argocd --example-data
+task local-setup:start -- --remote --deployment-tech=fluxcd --example-data
+task local-setup:start -- --remote --deployment-tech=argocd --example-data
 ```
 
 **Iterate mode (--iterate=BOOL flag, default true):** With `--iterate=true` (the default), the setup reuses an existing cluster and only rebuilds the OCM component from local charts and reapplies it — the fastest feedback loop during chart development. If no cluster exists yet, it falls through to a full setup automatically. Pass `--iterate=false` to require a full setup; if a cluster already exists at that point, `start.sh` fails and asks you to delete it first (`kind delete cluster --name platform-mesh`) rather than guessing whether to reuse or replace it.
 
 **Task Naming Convention:**
 
-- There is a single `local-setup` task; all behavior is controlled by flags passed through to `start.sh` after `--`, e.g. `task local-setup -- --example-data --concurrent --sharded=false`
+- There is a single `local-setup:start` task; all behavior is controlled by flags passed through to `start.sh` after `--`, e.g. `task local-setup:start -- --example-data --concurrent --sharded=false`
 - Available flags: see `./local-setup/scripts/start.sh --help`
 
 #### Developer information
@@ -323,7 +331,7 @@ Recreate the kind cluster from scratch:
 
 ```sh
 # With Task
-task local-setup
+task local-setup:start
 
 # Without Task
 kind delete cluster --name platform-mesh
@@ -394,7 +402,7 @@ cp local-setup/scripts/post-flux-hook.sh.example local-setup/scripts/post-flux-h
 
 1. Build your local image: `docker build -t ghcr.io/platform-mesh/my-component:dev .`
 2. Add the load command to `post-flux-hook.sh`
-3. Run `task local-setup` to reload the cluster with your custom images
+3. Run `task local-setup:start` to reload the cluster with your custom images
 
 ##### Platform-Mesh Resource Hook
 
@@ -493,7 +501,7 @@ npx playwright test test-register-and-navigate.test.ts
 **Prerequisites:**
 
 - Node.js and npm must be installed
-- The local setup cluster must be running (via `task local-setup` or similar)
+- The local setup cluster must be running (via `task local-setup:start` or similar)
 - Playwright browsers will be installed automatically on first run
 - `kubectl` must be available for both the browser flow and the backend readiness checks
 - `kubectl oidc-login` must be installed for the downloaded kubeconfig smoke test
