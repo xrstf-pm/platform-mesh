@@ -262,6 +262,21 @@ jobs:
         env:
           CHART: ${{ matrix.chart }}
 
+  # The keycloak-operator chart vendors the operator's CRDs; they must match
+  # the operator version in values.yaml.
+  chart-keycloak-crds:
+    needs: changes
+    if: contains(fromJson(needs.changes.outputs.charts), 'keycloak-operator')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: |
+          set -euo pipefail
+          bash hack/charts/update-keycloak-crds.sh "$(yq '.image.tag' charts/keycloak-operator/values.yaml)"
+          git diff --exit-code charts/keycloak-operator/crds/
+
   chart-docs:
     needs: changes
     if: needs.changes.outputs.charts != '[]'
