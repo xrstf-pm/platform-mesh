@@ -1,0 +1,123 @@
+# Copyright The Platform Mesh Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: prerelease
+
+# Publishes the current state of a branch (normally main) as a Platform Mesh
+# prerelease aggregate, exactly like release.yml does for a tag, but
+#
+#   - on demand (and optionally on a schedule), NOT for every commit,
+#   - with a version derived from git: <next release>-dev.<run number>.g<sha>,
+#     e.g. 0.6.0-dev.42.g1a2b3c4. "dev" sorts below "rc", so semver range
+#     queries prefer release candidates and releases over these builds,
+#   - without a GitHub release.
+#
+# Use it to test the latest main with local-setup:
+#   PLATFORM_MESH_VERSION=0.6.0-dev.42.g1a2b3c4 task local-setup:start
+#
+# Component images are not built here either; like a release, this uses the
+# image versions the charts' appVersion point to. Old prerelease versions are
+# removed by cleanup-prereleases.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch or commit to publish (default: the branch this workflow runs from)"
+        required: false
+        type: string
+  # Uncomment for a nightly build of main.
+  # schedule:
+  #   - cron: '0 3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prerelease
+  cancel-in-progress: false
+
+env:
+  # renovate: datasource=github-releases depName=open-component-model/open-component-model
+  OCM_CLI_VERSION: v0.13.0
+  # renovate: datasource=github-releases depName=helm/helm
+  HELM_VERSION: v4.2.3
+
+jobs:
+  prerelease:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    env:
+      OCM_REPO: ghcr.io/${{ github.repository_owner }}
+      SIGNATURE: ${{ vars.OCM_SIGNATURE_NAME || 'platform-mesh.platform-mesh' }}
+      MIRROR_FROM: ${{ vars.OCM_MIRROR_FROM }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+          fetch-depth: 0 # tags are needed to derive the version
+
+      - name: Derive version
+        id: v
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          version="$(hack/release/next-version.sh)-dev.${RUN_NUMBER}.g$(git rev-parse --short=7 HEAD)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing prerelease $version from $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install tools
+        run: |
+          set -euo pipefail
+          curl -LsSf -o /usr/local/bin/ocm \
+            "https://github.com/open-component-model/open-component-model/releases/download/${OCM_CLI_VERSION}/ocm-linux-amd64"
+          chmod +x /usr/local/bin/ocm
+          curl -LsSf "https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/linux-amd64/helm /usr/local/bin/helm
+          pip3 install --quiet pyyaml
+
+      - name: Registry credentials
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCM_SIGNING_PRIVATE_KEY: ${{ secrets.OCM_SIGNING_PRIVATE_KEY }}
+          OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
+        run: |
+          set -euo pipefail
+          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" > "$HOME/.ocmconfig"
+
+      - name: Build and publish OCM components
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          args=(--version "$VERSION" --ocm-repo "$OCM_REPO" --signature "$SIGNATURE"
+                --repo-url "$REPO_URL" --commit "$(git rev-parse HEAD)")
+          [ -n "$MIRROR_FROM" ] && args+=(--mirror-from "$MIRROR_FROM")
+          hack/release/build-aggregate.sh "${args[@]}"
+          {
+            echo "### Published to \`$OCM_REPO\`"
+            echo
+            echo "Install with \`PLATFORM_MESH_VERSION=$VERSION task local-setup:start\`."
+            echo
+            echo '```'
+            cat ocm/.generated/published.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
