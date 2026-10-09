@@ -114,7 +114,7 @@ jobs:
           OCM_REPO: ghcr.io/${{ github.repository_owner }}
         run: |
           set -euo pipefail
-          version="$(ocm get component-version --latest "$OCM_REPO//github.com/platform-mesh/platform-mesh" -o json | jq -r '.[0].component.version')"
+          version="$("$OCM" get component-version --latest "$OCM_REPO//github.com/platform-mesh/platform-mesh" -o json | jq -r '.[0].component.version')"
           [ -n "$version" ] && [ "$version" != null ] || { echo "::error::no published Platform Mesh version found in $OCM_REPO"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Generate webhook certificates

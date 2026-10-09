@@ -307,10 +307,9 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install release tooling (ocm, helm, yq; versions from tools/Taskfile.yaml)
+      - name: Install "$OCM" (pinned in tools/Taskfile.yaml)
         run: |
-          task tools:release
-          echo "$PWD/bin/release" >> "$GITHUB_PATH"
+          echo "OCM=$(UGET_PRINT_PATH=absolute task tools:ocm)" >> "$GITHUB_ENV"
       - name: Write OCM config (registry credentials + signing key)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -363,9 +362,9 @@ jobs:
                     path: sbom-spdx.json
                     mediaType: application/spdx+json
           EOF
-          ocm add component-versions --repository ctf::transport.ctf --constructor constructor.yaml
-          ocm sign component-version --signature "$SIGNATURE" "ctf::transport.ctf//${COMPONENT_NAME}:${VERSION}"
-          ocm transfer component-version "ctf::transport.ctf//${COMPONENT_NAME}:${VERSION}" "$OCM_REPO"
+          "$OCM" add component-versions --repository ctf::transport.ctf --constructor constructor.yaml
+          "$OCM" sign component-version --signature "$SIGNATURE" "ctf::transport.ctf//${COMPONENT_NAME}:${VERSION}"
+          "$OCM" transfer component-version "ctf::transport.ctf//${COMPONENT_NAME}:${VERSION}" "$OCM_REPO"
           echo "Published ${OCM_REPO}//${COMPONENT_NAME}:${VERSION}" >> "$GITHUB_STEP_SUMMARY"
 
   trivy-image:

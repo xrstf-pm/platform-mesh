@@ -11,7 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Pinned ocm/helm/yq (tools/Taskfile.yaml), installed on demand
-source "$PROJECT_ROOT/hack/release/tools.sh" # pinned ocm/helm/yq on PATH
+source "$PROJECT_ROOT/hack/release/tools.sh" # pinned tool versions, see tools/Taskfile.yaml
+require_tools helm
 
 # Configuration
 LOCAL_BIN="${LOCAL_BIN:-$PROJECT_ROOT/bin}"
@@ -63,7 +64,7 @@ swap_common_to_local() {
         mv "$temp_file" "$chart_yaml"
 
         # Update dependencies to fetch local common chart
-        helm dependency update "$chart_path" 2>/dev/null || true
+        "$HELM" dependency update "$chart_path" 2>/dev/null || true
 
         return 0  # swapped
     fi
@@ -91,7 +92,7 @@ prepare_and_push_chart() {
     swap_common_to_local "$prerelease_chart_dir" || true
 
     local out tarball
-    out=$(helm package "$prerelease_chart_dir" -d "$PRERELEASE_DIR")
+    out=$("$HELM" package "$prerelease_chart_dir" -d "$PRERELEASE_DIR")
     tarball=$(echo "$out" | awk -F': ' '/saved it to:/ {print $2}')
     if [ ! -f "$tarball" ]; then
         echo -e "${RED}Failed to package $comp${COL_RES}" >&2

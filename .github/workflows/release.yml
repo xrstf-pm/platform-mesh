@@ -84,10 +84,11 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install release tooling (ocm, helm, yq; versions from tools/Taskfile.yaml)
+      - name: Install ocm, helm, yq (pinned in tools/Taskfile.yaml)
         run: |
-          task tools:release
-          echo "$PWD/bin/release" >> "$GITHUB_PATH"
+          echo "OCM=$(UGET_PRINT_PATH=absolute task tools:ocm)" >> "$GITHUB_ENV"
+          echo "HELM=$(UGET_PRINT_PATH=absolute task tools:helm)" >> "$GITHUB_ENV"
+          echo "YQ=$(UGET_PRINT_PATH=absolute task tools:yq)" >> "$GITHUB_ENV"
           pip3 install --quiet pyyaml
 
       - name: Registry credentials
@@ -100,7 +101,7 @@ jobs:
           if [ -z "$OCM_SIGNING_PRIVATE_KEY" ] || [ -z "$OCM_SIGNING_CERT" ]; then
             echo "::error::OCM_SIGNING_PRIVATE_KEY / OCM_SIGNING_CERT secrets are not set"; exit 1
           fi
-          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          echo "$GITHUB_TOKEN" | "$HELM" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" > "$HOME/.ocmconfig"
 
       - name: Build and publish OCM components
@@ -166,27 +167,28 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install release tooling (ocm, helm, yq; versions from tools/Taskfile.yaml)
+      - name: Install ocm, helm, yq (pinned in tools/Taskfile.yaml)
         run: |
-          task tools:release
-          echo "$PWD/bin/release" >> "$GITHUB_PATH"
+          echo "OCM=$(UGET_PRINT_PATH=absolute task tools:ocm)" >> "$GITHUB_ENV"
+          echo "HELM=$(UGET_PRINT_PATH=absolute task tools:helm)" >> "$GITHUB_ENV"
+          echo "YQ=$(UGET_PRINT_PATH=absolute task tools:yq)" >> "$GITHUB_ENV"
       - name: Registry credentials (public key only, no signing key)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
         run: |
           set -euo pipefail
-          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          echo "$GITHUB_TOKEN" | "$HELM" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           OCM_SIGNING_PRIVATE_KEY=unused hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" \
-            | yq 'del(.configurations[].consumers[].credentials[].properties.private_key_pem)' > "$HOME/.ocmconfig"
+            | "$YQ" 'del(.configurations[].consumers[].credentials[].properties.private_key_pem)' > "$HOME/.ocmconfig"
       - name: Component graph
         run: |
           set -euo pipefail
-          ocm get component-version "$OCM_REPO//$COMPONENT:$VERSION" --recursive -o yaml > graph.yaml
+          "$OCM" get component-version "$OCM_REPO//$COMPONENT:$VERSION" --recursive -o yaml > graph.yaml
           {
             echo "### Component graph of \`$COMPONENT:$VERSION\`"
             echo '```'
-            ocm get component-version "$OCM_REPO//$COMPONENT:$VERSION" --recursive
+            "$OCM" get component-version "$OCM_REPO//$COMPONENT:$VERSION" --recursive
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
@@ -200,15 +202,15 @@ jobs:
           # mirrored from elsewhere) may carry signatures from other keys.
           { echo "$COMPONENT:$VERSION"; cat published.txt; } | sort -u | while read -r cv; do
             [ -n "$cv" ] || continue
-            ocm verify component-version --signature "$SIGNATURE" "$OCM_REPO//$cv" >/dev/null
+            "$OCM" verify component-version --signature "$SIGNATURE" "$OCM_REPO//$cv" >/dev/null
             echo "verified $cv"
           done
       - name: Charts are installable
         run: |
           set -euo pipefail
           for chart in account-operator infra common; do
-            v="$(yq '.version' "charts/$chart/Chart.yaml")"
-            helm pull "oci://$OCM_REPO/platform-mesh/$chart" --version "$v" --destination /tmp
-            [ "$chart" = common ] || helm template "/tmp/$chart-$v.tgz" >/dev/null
+            v="$("$YQ" '.version' "charts/$chart/Chart.yaml")"
+            "$HELM" pull "oci://$OCM_REPO/platform-mesh/$chart" --version "$v" --destination /tmp
+            [ "$chart" = common ] || "$HELM" template "/tmp/$chart-$v.tgz" >/dev/null
             echo "ok: $chart $v"
           done

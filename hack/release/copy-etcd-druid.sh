@@ -25,6 +25,9 @@
 
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/tools.sh"
+require_tools ocm
+
 version="${1:?usage: $0 <version> <target-ocm-repo>}"
 target="${2:?usage: $0 <version> <target-ocm-repo>}"
 source_repo="europe-docker.pkg.dev/gardener-project/releases"
@@ -32,7 +35,7 @@ component="github.com/gardener/etcd-druid"
 
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 
-ocm transfer component-version --copy-resources --recursive --dry-run -o yaml \
+"$OCM" transfer component-version --copy-resources --recursive --dry-run -o yaml \
   "$source_repo//$component:$version" "$target" > "$tmp/spec.yaml"
 
 python3 - "$tmp/spec.yaml" "$tmp/spec-nospdx.yaml" <<'PY'
@@ -58,4 +61,4 @@ with open(dst, 'w') as f:
 print(f"stripped {len(spdx_ids)} SPDX nodes, {len(filtered)} remaining", file=sys.stderr)
 PY
 
-ocm transfer component-version --transfer-spec "$tmp/spec-nospdx.yaml"
+"$OCM" transfer component-version --transfer-spec "$tmp/spec-nospdx.yaml"

@@ -93,10 +93,6 @@ vars:
   YQ_VERSION: v4.52.4
   YQ: '{{.BIN}}/yq-{{.YQ_VERSION}}'
 
-  # Unversioned symlinks to the release tooling, for scripts that call plain
-  # `ocm`/`helm`/`yq`; see `tools:release` and hack/release/tools.sh.
-  RELEASE_BIN: '{{.BIN}}/release'
-
   OPENAPI_GEN_VERSION: d427ff9ee9ad05f5da435abbb7c5929cb713ac56 # most recent commit as of writing this
   OPENAPI_GEN: '{{.BIN}}/openapi-gen-{{.OPENAPI_GEN_VERSION}}'
 
@@ -232,11 +228,11 @@ tasks:
           version: '{{ .KUSTOMIZE_VERSION }}'
           extractArg: kustomize
   # The OCM CLI from github.com/open-component-model/open-component-model, the
-  # rewritten "v2" CLI that the release scripts and local-setup use. Not to be
+  # rewritten "v2" CLI that the release scripts and local-setup use (see
+  # hack/release/tools.sh for how scripts install and locate it). Not to be
   # confused with the older github.com/open-component-model/ocm CLI (versions
   # 0.2x), which has a different command syntax.
   ocm:
-    internal: true
     cmds:
       - task: uget
         vars:
@@ -246,7 +242,6 @@ tasks:
           uncompressed: true
           extractArg: 'ocm-*'
   helm:
-    internal: true
     cmds:
       - task: uget
         vars:
@@ -255,7 +250,6 @@ tasks:
           version: '{{ .HELM_VERSION }}'
           extractArg: '*/helm'
   yq:
-    internal: true
     cmds:
       - task: uget
         vars:
@@ -265,18 +259,6 @@ tasks:
           uncompressed: true
           extractArg: 'yq_*'
 
-  # Tools used by hack/release/*.sh and the release workflows. Besides the
-  # versioned binaries this creates bin/release/{ocm,helm,yq} so the scripts
-  # can prepend that directory to PATH (hack/release/tools.sh does this).
-  release:
-    desc: Install the release tooling (ocm, helm, yq) into bin/release.
-    deps: [ocm, helm, yq]
-    silent: true
-    cmds:
-      - mkdir -p '{{.RELEASE_BIN}}'
-      - ln -sfn '{{.OCM}}' '{{.RELEASE_BIN}}/ocm'
-      - ln -sfn '{{.HELM}}' '{{.RELEASE_BIN}}/helm'
-      - ln -sfn '{{.YQ}}' '{{.RELEASE_BIN}}/yq'
   mkcert:
     internal: true
     cmds:

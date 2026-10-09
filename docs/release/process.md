@@ -136,11 +136,13 @@ deviations from the default shape).
 
 The release scripts need `ocm` (the CLI from
 [open-component-model/open-component-model](https://github.com/open-component-model/open-component-model)),
-`helm` and `yq`. Their versions are pinned in `tools/Taskfile.yaml` and
-installed into `bin/` by `task tools:release`; `hack/release/tools.sh` runs
-that and puts `bin/release/` on `PATH`. The scripts source it, so the same
-versions are used locally and in the workflows. Set
-`RELEASE_TOOLS_FROM_PATH=true` to use whatever is on `PATH` instead.
+`helm` and `yq`. Their versions are pinned in `tools/Taskfile.yaml`
+(`task tools:ocm` etc. install them into `bin/`). Scripts source
+`hack/release/tools.sh` and call `require_tools ocm helm`, which installs the
+tools they need and exports their paths as `$OCM`, `$HELM`, ...; the workflows
+do the same via `UGET_PRINT_PATH=absolute task tools:<tool>`. So one pin
+serves developers and CI. Set `RELEASE_TOOLS_FROM_PATH=true` to use whatever
+is on `PATH` instead.
 
 ## Verifying a release
 

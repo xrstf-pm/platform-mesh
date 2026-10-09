@@ -13,23 +13,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Source this file to get the pinned release tooling (ocm, helm, yq) on PATH.
-# The versions live in tools/Taskfile.yaml; `task tools:release` installs them
-# into bin/ and symlinks bin/release/{ocm,helm,yq}. Scripts and workflows use
-# this instead of maintaining their own download snippets.
+# Source this file and call `require_tools <tool>...` to install the pinned
+# versions of the named tools (via `task tools:<tool>`, versions in
+# tools/Taskfile.yaml) and get their paths in upper-cased variables:
 #
 #   source "$(git rev-parse --show-toplevel)/hack/release/tools.sh"
+#   require_tools ocm helm yq
+#   "$OCM" version; "$HELM" version; "$YQ" --version
 #
 # Set RELEASE_TOOLS_FROM_PATH=true to skip the installation and use whatever
-# ocm/helm/yq are already on PATH (for environments without task or network).
+# is on PATH (for environments without task or network).
 
-if [ "${RELEASE_TOOLS_FROM_PATH:-false}" != "true" ]; then
-  _release_tools_root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
-  if ! command -v task >/dev/null; then
-    echo "error: 'task' (https://taskfile.dev) is required to install the release tooling; install it or set RELEASE_TOOLS_FROM_PATH=true" >&2
-    return 1 2>/dev/null || exit 1
-  fi
-  task -d "$_release_tools_root" tools:release
-  export PATH="$_release_tools_root/bin/release:$PATH"
-  unset _release_tools_root
-fi
+require_tools() {
+  local root tool var path
+  root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+  for tool in "$@"; do
+    var="$(echo "$tool" | tr 'a-z-' 'A-Z_')"
+    if [ "${RELEASE_TOOLS_FROM_PATH:-false}" = "true" ]; then
+      path="$(command -v "$tool")" || { echo "error: $tool is required" >&2; return 1; }
+    else
+      command -v task >/dev/null || { echo "error: 'task' (https://taskfile.dev) is required to install $tool; install it or set RELEASE_TOOLS_FROM_PATH=true" >&2; return 1; }
+      path="$(UGET_PRINT_PATH=absolute task -d "$root" "tools:$tool")" || return 1
+    fi
+    export "$var=$path"
+  done
+}

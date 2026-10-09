@@ -25,7 +25,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-source "$PROJECT_ROOT/hack/release/tools.sh" # pinned ocm/helm/yq on PATH
+source "$PROJECT_ROOT/hack/release/tools.sh" # pinned tool versions, see tools/Taskfile.yaml
+require_tools yq
 source "$SCRIPT_DIR/ocm-build-local-charts.sh"
 
 LOCAL_BIN="${LOCAL_BIN:-$PROJECT_ROOT/bin}"
@@ -79,7 +80,7 @@ generate_constructor() {
 mirror_external_components() {
     echo -e "${COL}[$(date '+%H:%M:%S')] Copying external components into the local registry...${COL_RES}"
     local refs
-    refs=$(yq -o=json '.' "$CONSTRUCTOR" | jq -r '
+    refs=$("$YQ" -o=json '.' "$CONSTRUCTOR" | jq -r '
         [.components[] | .name + ":" + .version] as $defined
         | [.components[].componentReferences[]? | .componentName + ":" + .version]
         | unique | .[] | select(. as $r | $defined | index($r) | not)')

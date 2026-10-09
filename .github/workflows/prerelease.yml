@@ -79,10 +79,11 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install release tooling (ocm, helm, yq; versions from tools/Taskfile.yaml)
+      - name: Install ocm, helm, yq (pinned in tools/Taskfile.yaml)
         run: |
-          task tools:release
-          echo "$PWD/bin/release" >> "$GITHUB_PATH"
+          echo "OCM=$(UGET_PRINT_PATH=absolute task tools:ocm)" >> "$GITHUB_ENV"
+          echo "HELM=$(UGET_PRINT_PATH=absolute task tools:helm)" >> "$GITHUB_ENV"
+          echo "YQ=$(UGET_PRINT_PATH=absolute task tools:yq)" >> "$GITHUB_ENV"
           pip3 install --quiet pyyaml
 
       - name: Registry credentials
@@ -92,7 +93,7 @@ jobs:
           OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
         run: |
           set -euo pipefail
-          echo "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          echo "$GITHUB_TOKEN" | "$HELM" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" > "$HOME/.ocmconfig"
 
       - name: Build and publish OCM components

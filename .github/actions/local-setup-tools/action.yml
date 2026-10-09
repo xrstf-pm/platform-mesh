@@ -37,8 +37,6 @@ runs:
         export PATH="$HOME/.krew/bin:$PATH"
         kubectl krew index add kcp-dev https://github.com/kcp-dev/krew-index.git
         kubectl krew install kcp-dev/kcp kcp-dev/ws kcp-dev/create-workspace oidc-login
-    - name: Install release tooling (ocm, helm, yq; versions from tools/Taskfile.yaml)
+    - name: Install ocm (pinned in tools/Taskfile.yaml)
       shell: bash
-      run: |
-        task tools:release
-        echo "$PWD/bin/release" >> "$GITHUB_PATH"
+      run: echo "OCM=$(UGET_PRINT_PATH=absolute task tools:ocm)" >> "$GITHUB_ENV"
