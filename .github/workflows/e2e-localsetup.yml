@@ -117,7 +117,8 @@ jobs:
           version="$(ocm get component-version --latest "$OCM_REPO//github.com/platform-mesh/platform-mesh" -o json | jq -r '.[0].component.version')"
           [ -n "$version" ] && [ "$version" != null ] || { echo "::error::no published Platform Mesh version found in $OCM_REPO"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
-      - run: local-setup/scripts/gen-certs.sh
+      - name: Generate webhook certificates
+        run: local-setup/scripts/gen-certs.sh
       - name: Run remote local-setup (ArgoCD + example-data)
         env:
           PLATFORM_MESH_VERSION: ${{ steps.pm-version.outputs.version }}

@@ -60,7 +60,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - id: c
+      - name: Detect changed components and charts
+        id: c
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
@@ -95,7 +96,8 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: task verify-${COMPONENT}
+      - name: Verify (lint, tidy, boilerplate)
+        run: task verify-${COMPONENT}
         env:
           COMPONENT: ${{ matrix.component }}
 
@@ -118,7 +120,8 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: task test-${COMPONENT}
+      - name: Unit tests
+        run: task test-${COMPONENT}
         env:
           COMPONENT: ${{ matrix.component }}
 
@@ -141,7 +144,8 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: task test-e2e-${COMPONENT}
+      - name: E2E tests
+        run: task test-e2e-${COMPONENT}
         env:
           COMPONENT: ${{ matrix.component }}
 
@@ -176,7 +180,8 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - id: build
+      - name: Build image (push + :latest on main only)
+        id: build
         env:
           COMPONENT: ${{ matrix.component }}
           PR: ${{ github.event.pull_request.number }}
@@ -200,7 +205,8 @@ jobs:
           fi
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         if: env.PUSH == 'true'
-      - if: env.PUSH == 'true'
+      - name: Sign image
+        if: env.PUSH == 'true'
         run: cosign sign --yes "${IMAGE_REF}"
         env:
           IMAGE_REF: ${{ steps.build.outputs.imageRef }}
@@ -236,7 +242,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # ct lint also fails if a changed chart's version was not bumped.
-      - run: |
+      - name: Lint charts (ct lint, includes version bump check)
+        run: |
           ct lint --target-branch "${DEFAULT_BRANCH}" --chart-dirs=charts --validate-maintainers=false \
             --chart-repos=bitnami=https://charts.bitnami.com/bitnami,openfga=https://openfga.github.io/helm-charts,prometheus-community=https://prometheus-community.github.io/helm-charts,open-telemetry=https://open-telemetry.github.io/opentelemetry-helm-charts
         env:
@@ -257,8 +264,10 @@ jobs:
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           version: v4.2.3
-      - run: helm plugin install https://github.com/helm-unittest/helm-unittest
-      - run: helm unittest "charts/${CHART}"
+      - name: Install helm-unittest
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest
+      - name: Chart unit tests
+        run: helm unittest "charts/${CHART}"
         env:
           CHART: ${{ matrix.chart }}
 
@@ -272,7 +281,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - run: |
+      - name: Keycloak CRDs match the operator version
+        run: |
           set -euo pipefail
           bash hack/charts/update-keycloak-crds.sh "$(yq '.image.tag' charts/keycloak-operator/values.yaml)"
           git diff --exit-code charts/keycloak-operator/crds/
@@ -292,6 +302,7 @@ jobs:
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - run: task charts:docs
+      - name: Generate chart docs
+        run: task charts:docs
       - name: Generated chart docs must be committed
         run: git diff --exit-code
