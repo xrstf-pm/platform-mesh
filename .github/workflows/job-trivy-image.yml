@@ -41,6 +41,8 @@ jobs:
   trivy-scan:
     runs-on: ubuntu-latest
     permissions:
+      contents: read # Needed for actions/checkout
+      packages: read # Needed to pull the image to scan (private packages)
       security-events: write # Needed to upload Trivy SARIF to code scanning
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
