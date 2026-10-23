@@ -72,8 +72,13 @@ jobs:
         id: c
         run: |
           set -euo pipefail
-          echo "images=$(yq -o=json -I=0 '[.components | to_entries[] | select(.value.image) | {component: .key, image: .value.image}]' ocm/components.yaml)" >> "$GITHUB_OUTPUT"
-          echo "extraImages=$(yq -o=json -I=0 '[.components | to_entries[] | .value.extraImages[]?]' ocm/components.yaml)" >> "$GITHUB_OUTPUT"
+          images="$(yq -o=json -I=0 '[.components | to_entries | .[] | select(.value.image != null) | {"component": .key, "image": .value.image}]' ocm/components.yaml)"
+          extra="$(yq -o=json -I=0 '[.components | to_entries | .[] | .value.extraImages // [] | .[]]' ocm/components.yaml)"
+          [ "$images" != "[]" ] && [ -n "$images" ] || { echo "::error::no image components found in ocm/components.yaml"; exit 1; }
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+          echo "extraImages=$extra" >> "$GITHUB_OUTPUT"
+          echo "$images" | jq -r '.[] | "- \(.component) (image \(.image))"'
+          echo "$extra" | jq -r '.[] | "- \(.name) (extra image, context \(.context))"'
 
   # ──────────────────────────────────────────────
   # Component images: build, push, sign, SBOM, attest, OCM component.
