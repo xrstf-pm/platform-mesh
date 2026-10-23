@@ -1,0 +1,40 @@
+# Copyright The Platform Mesh Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: latest Platform Mesh version
+description: Resolves the latest published github.com/platform-mesh/platform-mesh component version.
+inputs:
+  ocm-repo:
+    description: OCM repository to look in
+    required: false
+    default: ghcr.io/${{ github.repository_owner }}
+outputs:
+  version:
+    description: The resolved version
+    value: ${{ steps.resolve.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve latest published Platform Mesh version
+      id: resolve
+      shell: bash
+      env:
+        OCM_REPO: ${{ inputs.ocm-repo }}
+      run: |
+        set -euo pipefail
+        ocm="$(UGET_PRINT_PATH=absolute task tools:ocm)"
+        version="$("$ocm" get component-version --latest "$OCM_REPO//github.com/platform-mesh/platform-mesh" -o json | jq -r '.[0].component.version')"
+        [ -n "$version" ] && [ "$version" != null ] || { echo "::error::no published Platform Mesh version found in $OCM_REPO"; exit 1; }
+        echo "Latest published Platform Mesh version: $version"
+        echo "version=$version" >> "$GITHUB_OUTPUT"

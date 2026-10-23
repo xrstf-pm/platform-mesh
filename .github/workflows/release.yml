@@ -37,7 +37,7 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
-      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+.*'
 
 permissions:
   contents: read
@@ -70,8 +70,6 @@ jobs:
 
       - name: Resolve version
         id: v
-        env:
-          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
@@ -80,11 +78,14 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "Releasing Platform Mesh $version (prerelease: $prerelease)" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          TAG: ${{ github.ref_name }}
 
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install ocm, helm, yq (pinned in tools/Taskfile.yaml)
+
+      - name: Install OCM, Helm, yq
         run: |
           echo "OCM=$(UGET_PRINT_PATH=absolute task tools:ocm)" >> "$GITHUB_ENV"
           echo "HELM=$(UGET_PRINT_PATH=absolute task tools:helm)" >> "$GITHUB_ENV"
@@ -92,10 +93,6 @@ jobs:
           pip3 install --quiet pyyaml
 
       - name: Registry credentials
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OCM_SIGNING_PRIVATE_KEY: ${{ secrets.OCM_SIGNING_PRIVATE_KEY }}
-          OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
         run: |
           set -euo pipefail
           if [ -z "$OCM_SIGNING_PRIVATE_KEY" ] || [ -z "$OCM_SIGNING_CERT" ]; then
@@ -103,11 +100,12 @@ jobs:
           fi
           echo "$GITHUB_TOKEN" | "$HELM" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" > "$HOME/.ocmconfig"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCM_SIGNING_PRIVATE_KEY: ${{ secrets.OCM_SIGNING_PRIVATE_KEY }}
+          OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
 
       - name: Build and publish OCM components
-        env:
-          VERSION: ${{ steps.v.outputs.version }}
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           set -euo pipefail
           args=(--version "$VERSION" --ocm-repo "$OCM_REPO" --signature "$SIGNATURE"
@@ -120,6 +118,9 @@ jobs:
             cat ocm/.generated/published.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -128,22 +129,22 @@ jobs:
           retention-days: 7
 
       - name: Release notes
+        run: hack/release/release-notes.sh "v${VERSION}" > release-notes.md
         env:
           VERSION: ${{ steps.v.outputs.version }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: hack/release/release-notes.sh "v${VERSION}" > release-notes.md
 
       - name: Create GitHub release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-          PRERELEASE: ${{ steps.v.outputs.prerelease }}
         run: |
           set -euo pipefail
           flags=(--title "Platform Mesh ${TAG#v}" --notes-file release-notes.md --verify-tag)
           [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
           cp ocm/.generated/constructor.yaml component-constructor.yaml
           gh release create "$TAG" "${flags[@]}" component-constructor.yaml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ steps.v.outputs.prerelease }}
 
   # ──────────────────────────────────────────────
   # Check the published result the way a consumer would see it.
@@ -164,15 +165,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install ocm, helm, yq (pinned in tools/Taskfile.yaml)
+
+      - name: Install OCM, Helm, yq
         run: |
           echo "OCM=$(UGET_PRINT_PATH=absolute task tools:ocm)" >> "$GITHUB_ENV"
           echo "HELM=$(UGET_PRINT_PATH=absolute task tools:helm)" >> "$GITHUB_ENV"
           echo "YQ=$(UGET_PRINT_PATH=absolute task tools:yq)" >> "$GITHUB_ENV"
-      - name: Registry credentials (public key only, no signing key)
+
+      - name: Registry credentials
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
@@ -181,6 +185,7 @@ jobs:
           echo "$GITHUB_TOKEN" | "$HELM" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           OCM_SIGNING_PRIVATE_KEY=unused hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" \
             | "$YQ" 'del(.configurations[].consumers[].credentials[].properties.private_key_pem)' > "$HOME/.ocmconfig"
+
       - name: Component graph
         run: |
           set -euo pipefail
@@ -191,9 +196,11 @@ jobs:
             "$OCM" get component-version "$OCM_REPO//$COMPONENT:$VERSION" --recursive
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: published
+
       - name: Signatures
         run: |
           set -euo pipefail
@@ -205,6 +212,7 @@ jobs:
             "$OCM" verify component-version --signature "$SIGNATURE" "$OCM_REPO//$cv" >/dev/null
             echo "verified $cv"
           done
+
       - name: Charts are installable
         run: |
           set -euo pipefail

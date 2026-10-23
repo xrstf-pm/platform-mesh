@@ -68,18 +68,19 @@ jobs:
 
       - name: Derive version
         id: v
-        env:
-          RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -euo pipefail
           version="$(hack/release/next-version.sh)-dev.${RUN_NUMBER}.g$(git rev-parse --short=7 HEAD)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Publishing prerelease $version from $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
 
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Install ocm, helm, yq (pinned in tools/Taskfile.yaml)
+
+      - name: Install tooling
         run: |
           echo "OCM=$(UGET_PRINT_PATH=absolute task tools:ocm)" >> "$GITHUB_ENV"
           echo "HELM=$(UGET_PRINT_PATH=absolute task tools:helm)" >> "$GITHUB_ENV"
@@ -87,19 +88,16 @@ jobs:
           pip3 install --quiet pyyaml
 
       - name: Registry credentials
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OCM_SIGNING_PRIVATE_KEY: ${{ secrets.OCM_SIGNING_PRIVATE_KEY }}
-          OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
         run: |
           set -euo pipefail
           echo "$GITHUB_TOKEN" | "$HELM" registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
           hack/release/ocm-config.sh "$OCM_REPO" "$SIGNATURE" > "$HOME/.ocmconfig"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OCM_SIGNING_PRIVATE_KEY: ${{ secrets.OCM_SIGNING_PRIVATE_KEY }}
+          OCM_SIGNING_CERT: ${{ secrets.OCM_SIGNING_CERT }}
 
       - name: Build and publish OCM components
-        env:
-          VERSION: ${{ steps.v.outputs.version }}
-          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           set -euo pipefail
           args=(--version "$VERSION" --ocm-repo "$OCM_REPO" --signature "$SIGNATURE"
@@ -115,3 +113,6 @@ jobs:
             cat ocm/.generated/published.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}

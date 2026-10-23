@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: cleanup-prereleases
+name: prerelease-cleanup
 
 # Removes Platform Mesh prerelease aggregates (versions tagged -dev.*, built by
 # prerelease.yml) older than two weeks from GHCR. Releases and release

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: component-release
+name: release-component
 
 # Releases ONE component of the monorepo. Triggered by pushing a tag of the
 # form `<component>/vX.Y.Z`, e.g. `account-operator/v0.15.6`. The component
@@ -64,6 +64,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
       - name: Resolve component and version from the tag
         id: r
         env:
@@ -99,14 +100,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.work
           cache: true # zizmor: ignore[cache-poisoning]
+
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify (lint, tidy, boilerplate)
+
+      - name: Verify
         run: task verify-${COMPONENT}
         env:
           COMPONENT: ${{ needs.resolve.outputs.component }}
@@ -119,13 +123,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.work
           cache: true # zizmor: ignore[cache-poisoning]
+
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Unit tests
         run: task test-${COMPONENT}
         env:
@@ -139,13 +146,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.work
           cache: true # zizmor: ignore[cache-poisoning]
+
       - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: E2E tests
         run: task test-e2e-${COMPONENT}
         env:

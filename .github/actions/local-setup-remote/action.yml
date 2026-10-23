@@ -1,0 +1,87 @@
+# Copyright The Platform Mesh Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: local-setup (remote)
+description: >-
+  Installs a published Platform Mesh version with local-setup in remote mode
+  (two kind clusters: infra running ArgoCD, runtime running Platform Mesh) and
+  runs the portal e2e tests. Expects a checked-out repository.
+
+inputs:
+  repo-token:
+    description: GitHub token for tool downloads and the e2e npm registry
+    required: true
+
+  platform-mesh-version:
+    description: >-
+      Published aggregate version to install (remote mode cannot build from
+      source). Empty or "latest" resolves the latest published version.
+    required: false
+    default: ""
+
+  argocd-version:
+    description: ArgoCD CLI version
+    required: false
+    # renovate: datasource=github-releases depName=argoproj/argo-cd
+    default: v3.2.3
+
+  artifact-name:
+    description: Suffix for the diagnostics artifacts uploaded on failure
+    required: false
+    default: remote
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/local-setup-tools
+      with:
+        repo-token: ${{ inputs.repo-token }}
+
+    - uses: ./.github/actions/latest-platform-mesh-version
+      id: latest
+      if: inputs.platform-mesh-version == '' || inputs.platform-mesh-version == 'latest'
+
+    - name: Install ArgoCD CLI
+      shell: bash
+      run: |
+        curl -sSL -o /usr/local/bin/argocd "https://github.com/argoproj/argo-cd/releases/download/${ARGOCD_VERSION}/argocd-linux-amd64"
+        chmod +x /usr/local/bin/argocd
+      env:
+        ARGOCD_VERSION: ${{ inputs.argocd-version }}
+
+    - name: Generate webhook certificates
+      shell: bash
+      run: local-setup/scripts/gen-certs.sh
+
+    - name: Run remote local-setup (ArgoCD + example-data)
+      shell: bash
+      run: task local-setup:start -- --remote --deployment-tech=argocd --example-data
+      env:
+        PLATFORM_MESH_VERSION: ${{ steps.latest.outputs.version || inputs.platform-mesh-version }}
+        DEBUG: true
+
+    - uses: ./.github/actions/playwright
+      with:
+        repo-token: ${{ inputs.repo-token }}
+
+    - name: Run e2e tests
+      shell: bash
+      run: task local-setup:test:portal-e2e:remote
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.repo-token }}
+
+    - uses: ./.github/actions/local-setup-diagnostics
+      if: failure()
+      with:
+        name: ${{ inputs.artifact-name }}

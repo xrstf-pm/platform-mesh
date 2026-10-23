@@ -14,21 +14,25 @@
 
 name: local-setup diagnostics
 description: Dumps cluster diagnostics and uploads them together with the Playwright artefacts.
+
 inputs:
   name:
     description: Suffix for the artifact names
     required: true
+
 runs:
   using: composite
   steps:
     - name: Dump cluster diagnostics
       shell: bash
       run: local-setup/scripts/dump-diagnostics.sh
+
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
         name: runtime-artifacts-${{ inputs.name }}
         path: runtime-artifacts/
         retention-days: 5
+
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
       with:
         name: playwright-artifacts-${{ inputs.name }}

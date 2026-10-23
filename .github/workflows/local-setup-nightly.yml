@@ -1,0 +1,73 @@
+# Copyright The Platform Mesh Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: local-setup-nightly
+
+# Installs the latest PUBLISHED Platform Mesh version with local-setup every
+# night, both single-cluster (Flux) and remote (two clusters, ArgoCD), and runs
+# the portal e2e tests. The steps live in .github/actions/local-setup and
+# .github/actions/local-setup-remote, shared with the verify-local-setup*
+# workflows that run on pull requests.
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    inputs:
+      platform-mesh-version:
+        description: 'Platform Mesh version to install; "latest" resolves the latest published version.'
+        required: false
+        default: latest
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-setup-nightly
+  cancel-in-progress: true
+
+jobs:
+  local:
+    runs-on: ubuntu-latest-large
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: ./.github/actions/local-setup
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          # inputs are empty on schedule, hence the fallback
+          platform-mesh-version: ${{ inputs.platform-mesh-version || 'latest' }}
+          wait-for-ready: "true"
+          artifact-name: local-setup-nightly
+
+  remote:
+    runs-on: ubuntu-latest-large
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: ./.github/actions/local-setup-remote
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          # inputs are empty on schedule, hence the fallback
+          platform-mesh-version: ${{ inputs.platform-mesh-version || 'latest' }}
+          artifact-name: local-setup-nightly-remote

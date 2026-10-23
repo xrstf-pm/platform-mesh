@@ -1,0 +1,89 @@
+# Copyright The Platform Mesh Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: local-setup
+description: >-
+  Installs Platform Mesh into a kind cluster with local-setup (single cluster,
+  Flux) and runs the portal e2e tests. Expects a checked-out repository.
+
+inputs:
+  repo-token:
+    description: GitHub token for tool downloads and the e2e npm registry
+    required: true
+
+  platform-mesh-version:
+    description: >-
+      Published aggregate version to install. Empty builds the aggregate from
+      the charts in the working tree (images as pinned by their appVersion);
+      "latest" resolves the latest published version.
+    required: false
+    default: ""
+
+  wait-for-ready:
+    description: Wait for every component/resource/HelmRelease/deployment to become ready before the e2e tests
+    required: false
+    default: "false"
+
+  artifact-name:
+    description: Suffix for the diagnostics artifacts uploaded on failure
+    required: false
+    default: local
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/local-setup-tools
+      with:
+        repo-token: ${{ inputs.repo-token }}
+
+    - uses: ./.github/actions/latest-platform-mesh-version
+      id: latest
+      if: inputs.platform-mesh-version == 'latest'
+
+    - name: Cache third-party OCM components
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ocm/cache/
+        key: ocm-thirdparty-${{ hashFiles('ocm/versions.yaml') }}
+
+    - name: Run local-setup with sharded example data
+      shell: bash
+      run: task local-setup:start -- --concurrent --example-data
+      env:
+        PLATFORM_MESH_VERSION: ${{ inputs.platform-mesh-version == 'latest' && steps.latest.outputs.version || inputs.platform-mesh-version }}
+
+    - name: Wait for all components to be ready
+      if: inputs.wait-for-ready == 'true'
+      shell: bash
+      run: |
+        sleep 10
+        kubectl wait --for=condition=ready --timeout=10m components --all -A
+        kubectl wait --for=condition=ready --timeout=10m resources --all -A
+        kubectl wait --for=condition=ready --timeout=10m helmreleases --all -A
+        kubectl wait --for=condition=Available --timeout=10m deployments --all -A
+
+    - uses: ./.github/actions/playwright
+      with:
+        repo-token: ${{ inputs.repo-token }}
+
+    - name: Run e2e tests
+      shell: bash
+      run: task local-setup:test:portal-e2e:video
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.repo-token }}
+
+    - uses: ./.github/actions/local-setup-diagnostics
+      if: failure()
+      with:
+        name: ${{ inputs.artifact-name }}
