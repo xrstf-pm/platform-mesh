@@ -54,6 +54,10 @@ alongside them.
 
 ## 3. Repository configuration
 
+Re-enable the schedules commented out with `# FORK:` in
+`local-setup-nightly.yml`, `prerelease-cleanup.yml`, `ossf-scorecard.yml`
+and `zizmor.yml` (`grep -rn "FORK:" .github/workflows`).
+
 | Kind | Name | Value |
 |---|---|---|
 | secret | `OCM_SIGNING_PRIVATE_KEY`, `OCM_SIGNING_CERT` | the key/cert matching the chosen signature name (O2). Both exist in helm-charts today. |

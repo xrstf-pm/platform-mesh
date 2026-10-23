@@ -32,8 +32,9 @@ on:
         required: false
         default: true
         type: boolean
-  schedule:
-    - cron: '0 4 * * 1' # Mondays
+  # FORK: schedule disabled to not burn runner minutes in the test fork; re-enable at cutover.
+  # schedule:
+  #   - cron: '0 4 * * 1' # Mondays
 
 permissions:
   contents: read

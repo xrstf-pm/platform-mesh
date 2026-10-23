@@ -21,8 +21,9 @@ name: local-setup-nightly
 # workflows that run on pull requests.
 
 on:
-  schedule:
-    - cron: '0 0 * * *'
+  # FORK: schedule disabled to not burn runner minutes in the test fork; re-enable at cutover.
+  # schedule:
+  #   - cron: '0 0 * * *'
   workflow_dispatch:
     inputs:
       platform-mesh-version:
