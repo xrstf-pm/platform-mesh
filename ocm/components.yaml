@@ -16,13 +16,11 @@
 # source for the CI and release workflows (which components exist, where their
 # sources are, which images they produce) and for the release notes.
 #
-# Keys are the component names. A component is released by pushing the tag
-# `<name>/vX.Y.Z` (`task release -- <name>`), which builds and signs its
-# image(s) and publishes the OCM component `github.com/platform-mesh/images/<name>`.
-# Libraries are only tagged (Go needs `<dir>/vX.Y.Z`), nothing is built.
-#
-# The order matters for `task release -- all`: list a module before the
-# modules that import it, so its tag exists when the consumers are bumped.
+# Components are not released on their own: a Platform Mesh release (tag
+# vX.Y.Z, release.yml) builds every image listed here at that version and
+# publishes it as the OCM component `github.com/platform-mesh/images/<name>`.
+# Libraries are Go modules other projects import; they keep versions of their
+# own and are tagged `<name>/vX.Y.Z` by hand, nothing is built for them.
 #
 # Fields:
 #   path         directory of the component (module root)
@@ -34,7 +32,10 @@
 #   extraImages  additional images built from a plain Dockerfile context:
 #                - name:    image name (same registry namespace)
 #                  context: build context directory
-#   chart        the component's Helm chart, if any (charts/<name>)
+#   chart        the component's Helm chart, if any (charts/<name>). Marks the
+#                chart as one whose appVersion is the Platform Mesh version
+#                (hack/release/stage-charts.sh); charts not listed here wrap
+#                components from other repositories or third parties.
 #   e2e          whether `task test-e2e-<name>` exists (default true)
 
 components:

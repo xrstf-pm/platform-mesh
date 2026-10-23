@@ -10,13 +10,25 @@ flip.
 
 | | Question | Options |
 |---|---|---|
-| O1 | Chart OCI namespace | keep `ghcr.io/platform-mesh/helm-charts/<chart>` (the monorepo's `GITHUB_TOKEN` cannot push there; needs the PM Publisher App token or re-linking every chart package to the monorepo) **or** move to `ghcr.io/platform-mesh/platform-mesh/<chart>` (what the new workflows do by default; 23 `Chart.yaml` dependency URLs, docs and the OCM chart resources then point at the new location; consumers pulling charts by URL must adapt) |
+| O1 | Chart OCI namespace | keep `ghcr.io/platform-mesh/helm-charts/<chart>` (the monorepo's `GITHUB_TOKEN` cannot push there; needs the PM Publisher App token or re-linking every chart package to the monorepo) **or** move to `ghcr.io/platform-mesh/platform-mesh/<chart>` (what the new workflows do by default; docs and the OCM chart resources then point at the new location; consumers pulling charts by URL must adapt). Chart dependencies are `file://` references now and no longer care. |
 | O2 | OCM signature name | keep `helm-charts.platform-mesh` (what consumers verify today) **or** switch to `platform-mesh.platform-mesh` (CN of the monorepo's existing cert). A switch is a consumer-visible change like the last one (`ocm.platform-mesh` → `helm-charts.platform-mesh` at 0.4.0-build.516) and needs a migration note |
-| D5 | Chart dependencies | keep OCI references to `common`/`*-crds` or switch to `file://` with exact pins (would force several charts onto newer crds/common versions than they bundle today; see `removed.md`) |
+| RFC 015 | First unified version | `0.60.0` per the RFC (above platform-mesh-operator 0.59.0). The `VERSION` file says `0.60`. Known wart: `gateway-api-crds` goes from chart version 1.5.1 to 0.60.0 (its `appVersion` keeps the upstream `v1.5.1`). |
 
 Recommendation: O1 move, O2 keep `helm-charts.platform-mesh` (set the repo
-variable `OCM_SIGNATURE_NAME` accordingly and use the helm-charts signing cert),
-D5 defer.
+variable `OCM_SIGNATURE_NAME` accordingly and use the helm-charts signing cert).
+
+Consumer-visible changes to announce with the first release (`docs/release/migration-0.60.md`,
+to be written at cutover once O1/O2 are decided):
+
+- all charts and OCM components carry the Platform Mesh version; version
+  constraints on individual charts must be adjusted (e.g. a Flux `HelmRelease`
+  pinning `account-operator` `0.21.x` becomes `0.60.x`)
+- `gateway-api-crds` version "downgrade" (Flux/Helm treat it as an upgrade only
+  if the release is reinstalled or `--force`d; the operator handles it through
+  the aggregate)
+- component images are tagged `ghcr.io/platform-mesh/platform-mesh/<image>:vX.Y.Z`
+  (the Platform Mesh version instead of the component's own)
+- O1/O2 as decided
 
 ## 1. Import helm-charts into the monorepo
 
@@ -37,7 +49,7 @@ point, or they have to be replayed.
 Port the fork's commits after the import (`ocm/`, `hack/release/`, the new
 workflows, `charts/Taskfile.yaml`, `local-setup/Taskfile.yaml`, docs). The old
 per-component workflows can stay in place during this step; `release.yml`
-only triggers on `v*` tags, which do not exist yet, and `ci.yml` runs
+only triggers on `v*` tags, which do not exist yet, and the `verify-*` workflows run
 alongside them.
 
 ## 3. Repository configuration
@@ -60,17 +72,23 @@ private on first push and must be made public once.
 
 ## 4. Component images
 
-Nothing to migrate: `component-release.yml` publishes the same
+Nothing to migrate: `job-publish.yml` publishes the same
 `github.com/platform-mesh/images/<component>` components to `ghcr.io/platform-mesh`
-that the old `image-ocm-legacy` job did. Verify with one component tag.
+that the old `image-ocm-legacy` job did, just at the Platform Mesh version.
+The images of the UI repositories (portal, iam-ui, marketplace-ui) and of
+example-httpbin-operator continue to come from those repositories.
 
 ## 5. Dress rehearsal: prerelease and release candidate
 
 ```sh
-gh workflow run prerelease.yml          # publishes <next>-dev.N.g<sha>
+gh workflow run prerelease.yml          # publishes 0.60.0-dev.N.g<sha>
 PLATFORM_MESH_VERSION=<that version> task local-setup:start   # with --iterate=false
-git tag v0.6.0-rc.1 && git push origin v0.6.0-rc.1
+git tag v0.60.0-rc.1 && git push origin v0.60.0-rc.1
 ```
+
+Note that local-setup's working-tree mode needs the images of a release
+reachable from `HEAD` (or `PLATFORM_MESH_IMAGE_VERSION`); until `v0.60.0-rc.1`
+exists, point it at a prerelease version.
 
 Both go through the complete new pipeline against the real registry and
 consumers. Check the `verify` job, install the rc with local-setup and
@@ -98,7 +116,8 @@ In one PR / afternoon:
 2. Archive `platform-mesh/helm-charts` (read-only). Its tags remain; the
    monorepo carries them as `helm-charts/0.x`.
 3. If O1 = move: update the chart dependency URLs and docs.
-4. Tag `v0.6.0`.
+4. Tag `v0.60.0`, then create `release-0.60`
+   and bump `VERSION` to `0.61` on `main`.
 
 ## Rollback
 

@@ -19,8 +19,15 @@
 # release and prerelease workflows and local-setup only call it with different
 # parameters.
 #
+# Platform Mesh has one version (RFC 015): every chart, every chart component
+# and every image component built from this repository carries --version. The
+# charts in git say 0.0.0; hack/release/stage-charts.sh writes the real
+# version into a copy under ocm/.generated/charts/ before packaging.
+#
 # Inputs (all taken from the checkout):
-#   charts/*/Chart.yaml           chart versions and image versions (appVersion)
+#   charts/*/Chart.yaml           the charts; appVersion of charts wrapping
+#                                 components from other repositories
+#   ocm/components.yaml           which charts belong to components built here
 #   ocm/charts/<chart>.yaml       per-chart OCM settings (see ocm/charts/README.md)
 #   ocm/component-constructor.yaml  template: aggregate + third-party wrappers
 #   ocm/versions.yaml             third-party version pins
@@ -29,7 +36,11 @@
 #   build-aggregate.sh --version <X.Y.Z> [options]
 #
 # Options:
-#   --version V         version of the aggregate component (required)
+#   --version V         the Platform Mesh version (required)
+#   --image-version V   version of the images built from this repository
+#                       (default: --version; their image tag is v<V>).
+#                       local-setup passes the latest release here because it
+#                       does not build images.
 #   --component NAME    aggregate component name (default github.com/platform-mesh/platform-mesh)
 #   --ocm-repo REPO     OCM repository to publish to and resolve references from
 #                       (default ghcr.io/platform-mesh)
@@ -59,6 +70,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 
 VERSION=""
+IMAGE_VERSION=""
 COMPONENT="github.com/platform-mesh/platform-mesh"
 OCM_REPO="ghcr.io/platform-mesh"
 CHART_REPO=""
@@ -74,6 +86,7 @@ OUTPUT="ocm/.generated/constructor.yaml"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --version) VERSION="$2"; shift 2 ;;
+    --image-version) IMAGE_VERSION="$2"; shift 2 ;;
     --component) COMPONENT="$2"; shift 2 ;;
     --ocm-repo) OCM_REPO="$2"; shift 2 ;;
     --chart-repo) CHART_REPO="$2"; shift 2 ;;
@@ -91,6 +104,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$VERSION" ]] || { echo "--version is required" >&2; exit 1; }
+IMAGE_VERSION="${IMAGE_VERSION:-$VERSION}"
+IMAGE_VERSION="${IMAGE_VERSION#v}"
 CHART_REPO="${CHART_REPO:-$OCM_REPO/platform-mesh}"
 CHART_REPO="${CHART_REPO#oci://}"
 COMMIT="${COMMIT:-$(git rev-parse HEAD)}"
@@ -115,52 +130,56 @@ require_tools ocm helm yq
 # for the constructor template and for ${...} in ocm/charts/*.yaml.
 # shellcheck disable=SC1090
 source <(hack/release/export-versions.sh --export)
-export VERSION COMPONENT_NAME="$COMPONENT" REPO_URL COMMIT
-
-chart_var() { # account-operator -> ACCOUNT_OPERATOR_VERSION
-  echo "$1" | tr 'a-z-' 'A-Z_' | sed 's/$/_VERSION/'
-}
+export VERSION IMAGE_VERSION COMPONENT_NAME="$COMPONENT" REPO_URL COMMIT
 
 # ---------------------------------------------------------------------------
-# Collect chart metadata
+# Stage the charts with the real version and collect their metadata
 # ---------------------------------------------------------------------------
-# charts_json: [{name, version, appVersion, publish, flat, hasImages, hasRefs, imageComponent, imageVersion}]
+mkdir -p "$(dirname "$OUTPUT")"
+STAGED="$(dirname "$OUTPUT")/charts"
+hack/release/stage-charts.sh "$STAGED" "$VERSION" "$IMAGE_VERSION" >/dev/null
+inhouse_charts="$("$YQ" '.components[] | select(has("chart")) | .chart' ocm/components.yaml | sed 's#^charts/##')"
+
+# charts_json: [{name, version, publish, flat, hasImages, hasRefs, imageComponent, imageVersion, settings}]
 charts_json="[]"
-for chart_yaml in charts/*/Chart.yaml; do
-  dir="$(dirname "$chart_yaml")"
-  name="$(basename "$dir")"
+for chart_yaml in "$STAGED"/*/Chart.yaml; do
+  name="$(basename "$(dirname "$chart_yaml")")"
   settings="ocm/charts/$name.yaml"
   [[ -f "$settings" ]] || settings=""
 
-  version="$("$YQ" -r '.version' "$chart_yaml")"
   app_version="$("$YQ" -r '.appVersion // ""' "$chart_yaml")"
   publish="$( [[ -n "$settings" ]] && "$YQ" -r '.publish != false' "$settings" || echo true)"
   flat="$( [[ -n "$settings" ]] && "$YQ" -r '.flat // false' "$settings" || echo false)"
   has_images="$( [[ -n "$settings" ]] && "$YQ" -r 'has("images")' "$settings" || echo false)"
   has_refs="$( [[ -n "$settings" ]] && "$YQ" -r 'has("extraReferences")' "$settings" || echo false)"
+  wants_image="$( [[ -n "$settings" ]] && "$YQ" -r '.image != false' "$settings" || echo true)"
 
-  # Which image component the service component references, if any.
+  # Which image component the service component references, if any:
+  #   - charts of components built here: images/<chart> at the image version
+  #   - wrapper charts with an `images:` inventory: images/<chart> at the chart version
+  #   - charts of components from other repositories: images/<chart> at their appVersion
   image_component=""; image_version=""
-  if [[ "$has_images" == "true" ]]; then
-    image_component="github.com/platform-mesh/images/$name"; image_version="$version"
-  elif [[ -n "$app_version" && "$app_version" != "0.0.0" ]]; then
-    image_component="github.com/platform-mesh/images/$name"; image_version="$app_version"
+  if [[ "$wants_image" == "true" ]]; then
+    if grep -qx "$name" <<<"$inhouse_charts"; then
+      image_component="github.com/platform-mesh/images/$name"; image_version="$IMAGE_VERSION"
+    elif [[ "$has_images" == "true" ]]; then
+      image_component="github.com/platform-mesh/images/$name"; image_version="$VERSION"
+    elif [[ -n "$app_version" && "$app_version" != "0.0.0" ]]; then
+      image_component="github.com/platform-mesh/images/$name"; image_version="$app_version"
+    fi
   fi
 
-  export "$(chart_var "$name")=$version"
   charts_json="$(jq -c \
-    --arg name "$name" --arg version "$version" --arg appVersion "$app_version" \
+    --arg name "$name" --arg version "$VERSION" \
     --argjson publish "$publish" --argjson flat "$flat" --argjson hasImages "$has_images" --argjson hasRefs "$has_refs" \
     --arg imageComponent "$image_component" --arg imageVersion "$image_version" --arg settings "$settings" \
-    '. + [{name:$name, version:$version, appVersion:$appVersion, publish:$publish, flat:$flat, hasImages:$hasImages, hasRefs:$hasRefs, imageComponent:$imageComponent, imageVersion:$imageVersion, settings:$settings}]' <<<"$charts_json")"
+    '. + [{name:$name, version:$version, publish:$publish, flat:$flat, hasImages:$hasImages, hasRefs:$hasRefs, imageComponent:$imageComponent, imageVersion:$imageVersion, settings:$settings}]' <<<"$charts_json")"
 done
-log "found $(jq length <<<"$charts_json") charts"
+log "staged $(jq length <<<"$charts_json") charts at version $VERSION (images: $IMAGE_VERSION) in $STAGED"
 
 # ---------------------------------------------------------------------------
 # Generate the constructor
 # ---------------------------------------------------------------------------
-mkdir -p "$(dirname "$OUTPUT")"
-
 # Start from the template (aggregate + third-party wrappers), substituting the
 # variables ourselves so the output is a plain, inspectable document.
 template_json="$("$YQ" -o=json '.' ocm/component-constructor.yaml | envsubst)"
@@ -251,7 +270,7 @@ if [[ "$SKIP_CHARTS" != "true" ]]; then
       continue
     fi
     log "packaging and pushing chart $name:$version"
-    "$HELM" package "charts/$name" --dependency-update --destination "$tmp" >/dev/null
+    "$HELM" package "$STAGED/$name" --dependency-update --destination "$tmp" >/dev/null
     "$HELM" push "$tmp/$name-$version.tgz" "oci://$CHART_REPO" >/dev/null
   done < <(jq -c '.[]' <<<"$charts_json")
 fi
@@ -283,10 +302,10 @@ if [[ ${#missing[@]} -gt 0 ]]; then
     case "$m" in
       github.com/platform-mesh/images/*)
         c="${m#github.com/platform-mesh/images/}"; c="${c%%:*}"; v="${m##*:}"
-        if "$YQ" -e ".components | has(\"$c\")" ocm/components.yaml >/dev/null 2>&1; then
-          echo "      -> push the tag $c/$v to build and publish it (component-release.yml)" >&2
+        if grep -qx "$c" <<<"$inhouse_charts"; then
+          echo "      -> built from this repository; the release workflow publishes it before the aggregate (--image-version $IMAGE_VERSION)" >&2
         else
-          echo "      -> built outside this repository; check that version $v was released" >&2
+          echo "      -> built outside this repository; check that version $v was released and update charts/$c/Chart.yaml (appVersion)" >&2
         fi ;;
     esac
   done
@@ -334,10 +353,8 @@ while IFS=$'\t' read -r cname cver; do
   if [[ "$want" != "$have" ]]; then
     echo "error: $cname:$cver already exists in $OCM_REPO with different content:" >&2
     diff <(jq . <<<"$have") <(jq . <<<"$want") | sed 's/^/    /' >&2 || true
-    if [[ "$cname" == "$COMPONENT" ]]; then
-      echo "    -> $VERSION was already released from a different commit; use a new version" >&2
-    elif [[ "$cname" == github.com/platform-mesh/* ]]; then
-      echo "    -> bump the chart version in charts/${cname##*/}/Chart.yaml" >&2
+    if [[ "$cver" == "$VERSION" ]]; then
+      echo "    -> $VERSION was already published from a different commit; versions are immutable, use a new one" >&2
     else
       echo "    -> bump the PM_* version of this wrapper in ocm/versions.yaml" >&2
     fi

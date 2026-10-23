@@ -36,17 +36,21 @@ tasks:
     cmds:
       - test -s {{.LOCAL_BIN}}/helm-docs || GOBIN=$(pwd)/{{.LOCAL_BIN}} go install github.com/norwoodj/helm-docs/cmd/helm-docs@v1.14.2
 
+  # Charts carry no version in git (0.0.0, injected at release time, RFC 015),
+  # hence no version-increment check.
   lint:
     deps: []
     cmds:
       - "./hack/charts/lint-image-schema.sh"
-      - "ct lint --target-branch main --chart-dirs=charts --validate-maintainers=false --chart-repos=bitnami=https://charts.bitnami.com/bitnami,openfga=https://openfga.github.io/helm-charts"
+      - "ct lint --target-branch main --chart-dirs=charts --validate-maintainers=false --check-version-increment=false --chart-repos=bitnami=https://charts.bitnami.com/bitnami,openfga=https://openfga.github.io/helm-charts"
+  # Dependencies (common, *-crds) are file:// references into this directory
+  # and not vendored; resolve them before testing.
   helmtest:
     cmds:
-      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do helm unittest $chart; done"
+      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do helm dependency update $chart >/dev/null && helm unittest $chart; done"
   helmtest-update:
     cmds:
-      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do helm unittest -u $chart; done"
+      - "for chart in $(echo {{.CHARTS}} | tr ',' ' '); do helm dependency update $chart >/dev/null && helm unittest -u $chart; done"
   test:
     deps:
       - task: helmtest

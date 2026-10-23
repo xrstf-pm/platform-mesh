@@ -1,8 +1,10 @@
 #!/bin/bash
 
-# Packages every chart under charts/ from the working tree and pushes it to the
-# kind cluster's OCI registry (via the ocm-transfer-pod). Sourced by
-# ocm-build-component.sh, which afterwards builds the OCM components for them.
+# Packages the charts staged by hack/release/build-aggregate.sh (copies of
+# charts/ with the build's version written in, see hack/release/stage-charts.sh)
+# and pushes them to the kind cluster's OCI registry via the ocm-transfer-pod.
+# Sourced by ocm-build-component.sh, which afterwards builds the OCM components
+# for them.
 
 set -e
 
@@ -16,10 +18,9 @@ require_tools helm
 
 # Configuration
 LOCAL_BIN="${LOCAL_BIN:-$PROJECT_ROOT/bin}"
-OCM_DIR="${OCM_DIR:-$PROJECT_ROOT/ocm}"
+# Where build-aggregate.sh stages the charts and where packages go.
+STAGED_CHARTS="${STAGED_CHARTS:-$PROJECT_ROOT/ocm/.generated/charts}"
 PRERELEASE_DIR="${PRERELEASE_DIR:-$PROJECT_ROOT/prerelease}"
-
-# Local charts to build (component-name:chart-path)
 
 # Color output (respect NO_COLOR env var)
 if [ -z "$NO_COLOR" ]; then
@@ -40,59 +41,19 @@ get_kubectl_exec_flags() {
     echo "-i"
 }
 
-# Swap OCI common chart reference to local file reference (only for 'common' dependency)
-# Operates on a copied chart in the prerelease directory to avoid modifying original files
-swap_common_to_local() {
-    local chart_path="$1"  # Full path to the copied chart
-    local chart_yaml="$chart_path/Chart.yaml"
-
-    # Check if this chart has a common dependency with OCI reference
-    if grep -A2 "name: common" "$chart_yaml" | grep -q "oci://ghcr.io/platform-mesh/helm-charts"; then
-        # Replace only the common chart's OCI reference with local file reference
-        # Uses awk to only modify the repository line that follows "name: common"
-        # Path is relative to the copied chart in prerelease/<comp>/, pointing to prerelease/common
-        local temp_file
-        temp_file=$(mktemp)
-        awk '
-            /- name: common/ { in_common=1 }
-            in_common && /repository:.*oci:\/\/ghcr.io\/platform-mesh\/helm-charts/ {
-                sub(/oci:\/\/ghcr.io\/platform-mesh\/helm-charts/, "file://../common")
-                in_common=0
-            }
-            { print }
-        ' "$chart_yaml" > "$temp_file"
-        mv "$temp_file" "$chart_yaml"
-
-        # Update dependencies to fetch local common chart
-        "$HELM" dependency update "$chart_path" 2>/dev/null || true
-
-        return 0  # swapped
-    fi
-    return 1  # no swap needed
-}
-
-
 # Configuration for parallel execution
 MAX_PARALLEL=${MAX_PARALLEL:-8}
 CONCURRENT=${CONCURRENT:-false}
 
-# Package one chart from the working tree and push it to the local registry.
+# Package one staged chart and push it to the local registry.
 prepare_and_push_chart() {
     local comp="$1"
-    local chart_dir="charts/$comp"
+    local chart_dir="$STAGED_CHARTS/$comp"
 
     echo -e "${COL}[$(date '+%H:%M:%S')] Processing $chart_dir${COL_RES}"
 
-    # Copy chart to prerelease directory to avoid modifying the original
-    local prerelease_chart_dir="$PRERELEASE_DIR/$comp"
-    rm -rf "$prerelease_chart_dir"
-    cp -r "$PROJECT_ROOT/$chart_dir" "$prerelease_chart_dir"
-
-    # Swap common chart reference to local in the copied chart (if it has the dependency)
-    swap_common_to_local "$prerelease_chart_dir" || true
-
     local out tarball
-    out=$("$HELM" package "$prerelease_chart_dir" -d "$PRERELEASE_DIR")
+    out=$("$HELM" package "$chart_dir" --dependency-update -d "$PRERELEASE_DIR")
     tarball=$(echo "$out" | awk -F': ' '/saved it to:/ {print $2}')
     if [ ! -f "$tarball" ]; then
         echo -e "${RED}Failed to package $comp${COL_RES}" >&2
@@ -105,34 +66,25 @@ prepare_and_push_chart() {
     echo -e "${COL}[$(date '+%H:%M:%S')] Pushed $tarball${COL_RES}"
 }
 
-# Package and push all charts (in parallel with CONCURRENT=true)
+# Package and push all staged charts (in parallel with CONCURRENT=true)
 build_local_charts() {
-    echo -e "${COL}[$(date '+%H:%M:%S')] Packaging and pushing charts from the working tree...${COL_RES}"
+    echo -e "${COL}[$(date '+%H:%M:%S')] Packaging and pushing charts from $STAGED_CHARTS...${COL_RES}"
+    [ -d "$STAGED_CHARTS" ] || { echo -e "${RED}$STAGED_CHARTS does not exist; run build-aggregate.sh first${COL_RES}" >&2; return 1; }
 
     # Ensure kubeconfig is set
     kind export kubeconfig -n platform-mesh
 
-    # Create prerelease directory
     mkdir -p "$PRERELEASE_DIR"
     rm -f "$PRERELEASE_DIR"/*.tgz
 
     local charts=()
-    for f in "$PROJECT_ROOT"/charts/*/Chart.yaml; do
+    for f in "$STAGED_CHARTS"/*/Chart.yaml; do
         local name
         name="$(basename "$(dirname "$f")")"
         [ "$name" = common ] && continue  # dependency only, bundled into the others
         charts+=("$name")
     done
 
-    # Copy common chart to prerelease directory (used as dependency by other charts)
-    rm -rf "$PRERELEASE_DIR/common"
-    cp -r "$PROJECT_ROOT/charts/common" "$PRERELEASE_DIR/common"
-
-    # Setup OCM CLI
-    setup_ocm_cli
-    export_ocm_path
-
-    # Phase 1: Prepare and push all charts
     local failed=0
 
     if [ "$CONCURRENT" = "true" ]; then
@@ -140,12 +92,9 @@ build_local_charts() {
         local running=0
         local pids=()
 
-        for pair in "${CUSTOM_LOCAL_COMPONENTS_CHART_PATHS[@]}"; do
-            local comp="${pair%%:*}"
-            local chart_dir="${pair#*:}"
-
+        for comp in "${charts[@]}"; do
             # Start background job
-            prepare_and_push_chart "$comp" "$chart_dir" &
+            prepare_and_push_chart "$comp" &
             pids+=($!)
             running=$((running + 1))
 
@@ -177,9 +126,6 @@ build_local_charts() {
         return 1
     fi
     echo -e "${COL}[$(date '+%H:%M:%S')] All charts packaged and pushed${COL_RES}"
-
-    # Phase 2: Add all components to local OCI registry sequentially
-    echo -e "${COL}[$(date '+%H:%M:%S')] All charts pushed${COL_RES}"
 }
 
 # Main function

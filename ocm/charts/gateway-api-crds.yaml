@@ -19,3 +19,5 @@
 # resource directly instead of referencing a helm-charts/gateway-api-crds
 # component.
 flat: true
+# appVersion records the bundled Gateway API release; there is no image.
+image: false

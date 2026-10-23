@@ -46,10 +46,6 @@ This repository is the Platform Mesh **monorepo**: it consolidates the shared li
 | [rebac-authz-webhook](services/rebac-authz-webhook) | Kubernetes authorization webhook backed by OpenFGA (ReBAC). |
 | [kubernetes-graphql-gateway](services/kubernetes-graphql-gateway) | Exposes Kubernetes resources as a GraphQL API for UIs and tools. |
 
-### Tooling
-
-Repository tooling lives under [`cmd/`](cmd) — including [`release`](cmd/release), which cuts component release tags — and [`hack/release/`](hack/release), which builds and publishes the OCM components.
-
 ## Getting started
 
 Each module can be built and tested on its own, or through the repository-root [Taskfile](Taskfile.yaml), which fans out to every component:
@@ -114,7 +110,7 @@ See [contrib/tilt/README.md](contrib/tilt/README.md) for the full environment: w
 
 ## Releasing
 
-Component images are released by tagging `<component>/vX.Y.Z` (`task release -- <component>`); Platform Mesh itself by tagging `vX.Y.Z`, which publishes the signed OCM component graph for the charts and versions committed at that point and creates a GitHub release. See [docs/release/process.md](docs/release/process.md).
+Platform Mesh has one version. Tagging `vX.Y.Z` builds every component image and chart from that commit, publishes the signed OCM component graph and creates a GitHub release; patch releases are tags on `release-X.Y` branches, backports are plain cherry-picks. See [docs/release/process.md](docs/release/process.md) and [RFC 015](https://github.com/platform-mesh/architecture/blob/main/rfc/015-versioning.md).
 
 ## Requirements
 

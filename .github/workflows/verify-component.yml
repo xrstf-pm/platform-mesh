@@ -199,8 +199,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HELM: ${{ steps.helm.outputs.path }}
 
-      # ct lint also fails if a changed chart's version was not bumped.
-      - name: Lint charts / chart versions
+      - name: Lint charts
         run: task charts:lint
         env:
           TARGET_BRANCH: ${{ github.event.repository.default_branch }}
@@ -231,7 +230,7 @@ jobs:
           HELM: ${{ steps.helm.outputs.path }}
 
       - name: Chart unit tests
-        run: ${HELM} unittest "charts/${CHART}"
+        run: ${HELM} dependency update "charts/${CHART}" >/dev/null && ${HELM} unittest "charts/${CHART}"
         env:
           CHART: ${{ matrix.chart }}
           HELM: ${{ steps.helm.outputs.path }}

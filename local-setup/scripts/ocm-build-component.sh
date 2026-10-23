@@ -7,11 +7,14 @@
 #
 # The graph is the same one a release publishes, produced by the same
 # generator (hack/release/build-aggregate.sh --generate-only), only
-#   - the aggregate is named .../prerelease,
-#   - charts are packaged from the working tree and pushed to the local registry,
+#   - the aggregate is named .../prerelease and versioned COMPONENT_PRERELEASE_VERSION,
+#   - charts are packaged from the working tree (at that version) and pushed to
+#     the local registry,
+#   - images are not built: the charts point at the images of the latest
+#     release reachable from HEAD (PLATFORM_MESH_IMAGE_VERSION overrides this;
+#     use load-custom-images.sh for locally built ones),
 #   - image components and other external references are copied into the local
-#     registry from REMOTE_REGISTRY (images are those pinned by the charts'
-#     appVersion; use load-custom-images.sh for locally built ones).
+#     registry from REMOTE_REGISTRY.
 #
 # All registry operations run inside the ocm-transfer-pod, since the local
 # registry is only reachable from within the cluster.
@@ -33,6 +36,18 @@ LOCAL_BIN="${LOCAL_BIN:-$PROJECT_ROOT/bin}"
 COMPONENT_PRERELEASE_VERSION="${COMPONENT_PRERELEASE_VERSION:-1.0.0}"
 PRERELEASE_COMPONENT="github.com/platform-mesh/prerelease"
 
+# Images are not built here; use the ones of the latest release this checkout
+# contains (vX.Y.Z tags, including release candidates).
+if [ -z "${PLATFORM_MESH_IMAGE_VERSION:-}" ]; then
+    latest_tag="$(git -C "$PROJECT_ROOT" tag -l 'v[0-9]*' --merged HEAD 2>/dev/null | sort -V | tail -1)"
+    if [ -z "$latest_tag" ]; then
+        echo "No Platform Mesh release tag (vX.Y.Z) is reachable from HEAD and PLATFORM_MESH_IMAGE_VERSION is not set;" >&2
+        echo "cannot tell which component images to use." >&2
+        exit 1
+    fi
+    PLATFORM_MESH_IMAGE_VERSION="${latest_tag#v}"
+fi
+
 # Where external components (images, third-party wrappers) are copied from.
 REMOTE_REGISTRY="${REMOTE_REGISTRY:-ghcr.io/platform-mesh}"
 # In-cluster registry; only reachable from inside the cluster.
@@ -40,6 +55,7 @@ LOCAL_REGISTRY="${LOCAL_REGISTRY:-oci-registry-docker-registry.registry.svc.clus
 LOCAL_OCM_REPO="$LOCAL_REGISTRY/platform-mesh"
 
 CONSTRUCTOR="$PROJECT_ROOT/ocm/.generated/prerelease-constructor.yaml"
+export STAGED_CHARTS="$PROJECT_ROOT/ocm/.generated/charts"
 
 if [ -z "$NO_COLOR" ]; then
     COL='\033[92m'
@@ -68,6 +84,7 @@ generate_constructor() {
     "$PROJECT_ROOT/hack/release/build-aggregate.sh" \
         --generate-only \
         --version "$COMPONENT_PRERELEASE_VERSION" \
+        --image-version "$PLATFORM_MESH_IMAGE_VERSION" \
         --component "$PRERELEASE_COMPONENT" \
         --ocm-repo "$LOCAL_OCM_REPO" \
         --chart-repo "$LOCAL_OCM_REPO" \
@@ -101,7 +118,11 @@ mirror_external_components() {
             echo -e "${RED}Failed to copy $name:$version${COL_RES}" >&2
             case "$name" in
                 github.com/platform-mesh/images/*)
-                    echo -e "${RED}  The image version is taken from charts/${name##*/}/Chart.yaml (appVersion).${COL_RES}" >&2
+                    if [ "$version" = "$PLATFORM_MESH_IMAGE_VERSION" ]; then
+                        echo -e "${RED}  Images of Platform Mesh $PLATFORM_MESH_IMAGE_VERSION (the latest release tag reachable from HEAD); set PLATFORM_MESH_IMAGE_VERSION to use another release.${COL_RES}" >&2
+                    else
+                        echo -e "${RED}  The image version is taken from charts/${name##*/}/Chart.yaml (appVersion).${COL_RES}" >&2
+                    fi
                     echo -e "${RED}  For locally built images use local-setup/scripts/load-custom-images.sh.${COL_RES}" >&2 ;;
             esac
             failed=$((failed + 1))
@@ -126,8 +147,6 @@ build_component_graph() {
 build_component() {
     echo -e "${COL}[$(date '+%H:%M:%S')] Starting OCM component build...${COL_RES}"
     kind export kubeconfig -n platform-mesh
-    setup_ocm_cli
-    export_ocm_path
 
     generate_constructor
     build_local_charts
@@ -135,7 +154,7 @@ build_component() {
     build_component_graph
 
     echo ""
-    echo -e "${COL}[$(date '+%H:%M:%S')] Built $PRERELEASE_COMPONENT:$COMPONENT_PRERELEASE_VERSION from the working tree into $LOCAL_OCM_REPO (component names are a contract and do not follow the GitHub org)${COL_RES}"
+    echo -e "${COL}[$(date '+%H:%M:%S')] Built $PRERELEASE_COMPONENT:$COMPONENT_PRERELEASE_VERSION from the working tree into $LOCAL_OCM_REPO, using the images of Platform Mesh $PLATFORM_MESH_IMAGE_VERSION (component names are a contract and do not follow the GitHub org)${COL_RES}"
 }
 
 main() {

@@ -14,9 +14,11 @@
 
 # Template for the Platform Mesh OCM component graph: the third-party wrapper
 # components and the top-level aggregate. hack/release/build-aggregate.sh
-# fills in the ${VARIABLES} (ocm/versions.yaml, chart versions from
-# charts/*/Chart.yaml, VERSION/COMPONENT_NAME/REPO_URL/COMMIT) and appends the
-# generated per-chart components (see ocm/charts/README.md).
+# fills in the ${VARIABLES} (third-party pins from ocm/versions.yaml, plus
+# VERSION/COMPONENT_NAME/REPO_URL/COMMIT) and appends the generated per-chart
+# components (see ocm/charts/README.md). Everything built from this repository
+# has the one Platform Mesh ${VERSION}; only third-party wrappers and
+# components from other repositories have versions of their own.
 #
 # The reference names of the aggregate are a contract with the
 # platform-mesh-operator (referencePath) and must not be renamed.
@@ -267,25 +269,25 @@ components:
     componentReferences:
       - name: account-operator
         componentName: github.com/platform-mesh/account-operator
-        version: ${ACCOUNT_OPERATOR_VERSION}
+        version: ${VERSION}
       - name: etcd-druid
         componentName: github.com/gardener/etcd-druid
         version: ${GARDENER_ETCD_DRUID_VERSION}
       - name: extension-manager-operator
         componentName: github.com/platform-mesh/extension-manager-operator
-        version: ${EXTENSION_MANAGER_OPERATOR_VERSION}
+        version: ${VERSION}
       - name: example-httpbin-operator
         componentName: github.com/platform-mesh/example-httpbin-operator
-        version: ${EXAMPLE_HTTPBIN_OPERATOR_VERSION}
+        version: ${VERSION}
       - name: kro-composition-operator
         componentName: github.com/platform-mesh/kro-composition-operator
-        version: ${KRO_COMPOSITION_OPERATOR_VERSION}
+        version: ${VERSION}
       - name: infra
         componentName: github.com/platform-mesh/infra
-        version: ${INFRA_VERSION}
+        version: ${VERSION}
       - name: keycloak-operator
         componentName: github.com/platform-mesh/keycloak-operator
-        version: ${KEYCLOAK_OPERATOR_VERSION}
+        version: ${VERSION}
       - name: kcp-operator
         componentName: github.com/kcp-dev/kcp-operator
         version: ${PM_KCP_OPERATOR_VERSION}
@@ -297,49 +299,49 @@ components:
         version: ${PM_INIT_AGENT_VERSION}
       - name: kubernetes-graphql-gateway
         componentName: github.com/platform-mesh/kubernetes-graphql-gateway
-        version: ${KUBERNETES_GRAPHQL_GATEWAY_VERSION}
+        version: ${VERSION}
       - name: rebac-authz-webhook
         componentName: github.com/platform-mesh/rebac-authz-webhook
-        version: ${REBAC_AUTHZ_WEBHOOK_VERSION}
+        version: ${VERSION}
       - name: security-operator
         componentName: github.com/platform-mesh/security-operator
-        version: ${SECURITY_OPERATOR_VERSION}
+        version: ${VERSION}
       - name: openfga
         componentName: github.com/openfga/openfga
         version: ${PM_OPENFGA_VERSION}
       - name: platform-mesh-operator
         componentName: github.com/platform-mesh/platform-mesh-operator
-        version: ${PLATFORM_MESH_OPERATOR_VERSION}
+        version: ${VERSION}
       - name: portal
         componentName: github.com/platform-mesh/portal
-        version: ${PORTAL_VERSION}
+        version: ${VERSION}
       - name: virtual-workspaces
         componentName: github.com/platform-mesh/virtual-workspaces
-        version: ${VIRTUAL_WORKSPACES_VERSION}
+        version: ${VERSION}
       - name: iam-service
         componentName: github.com/platform-mesh/iam-service
-        version: ${IAM_SERVICE_VERSION}
+        version: ${VERSION}
       - name: iam-ui
         componentName: github.com/platform-mesh/iam-ui
-        version: ${IAM_UI_VERSION}
+        version: ${VERSION}
       - name: marketplace-ui
         componentName: github.com/platform-mesh/marketplace-ui
-        version: ${MARKETPLACE_UI_VERSION}
+        version: ${VERSION}
       - name: gateway-api-crds
         componentName: github.com/platform-mesh/gateway-api-crds
-        version: ${GATEWAY_API_CRDS_VERSION}
+        version: ${VERSION}
       - name: traefik
         componentName: github.com/traefik/traefik
         version: ${PM_TRAEFIK_VERSION}
       - name: terminal-controller-manager
         componentName: github.com/platform-mesh/terminal-controller-manager
-        version: ${TERMINAL_CONTROLLER_MANAGER_VERSION}
+        version: ${VERSION}
       - name: cert-manager
         componentName: github.com/cert-manager/cert-manager
         version: ${PM_CERT_MANAGER_VERSION}
       - name: observability
         componentName: github.com/platform-mesh/observability
-        version: ${OBSERVABILITY_VERSION}
+        version: ${VERSION}
       - name: cnpg-operator
         componentName: github.com/cloudnative-pg/cloudnative-pg
         version: ${PM_CNPG_OPERATOR_VERSION}

@@ -42,17 +42,25 @@ Declare a dependency on the `common` library chart:
 apiVersion: v2
 name: my-service
 description: A Helm chart for my-service
-version: 0.1.0
-appVersion: v0.1.0
+version: 0.0.0
+appVersion: 0.0.0
 dependencies:
   - name: common
-    version: 0.15.0
-    repository: oci://ghcr.io/platform-mesh/helm-charts
+    version: 0.0.0
+    repository: file://../common
 ```
 
-- `version` is the chart version (bumped on chart changes)
-- `appVersion` is the container image tag (bumped when a new image is released)
-- If the service has no container image (chart-only, e.g. a UI bundle), set `appVersion: "0.0.0"`
+- `version` is always `0.0.0` in git. Platform Mesh has one version; the
+  release tooling writes it into every chart at build time
+  (see [docs/release/process.md](../release/process.md)).
+- `appVersion` is the container image tag:
+  - `0.0.0` if the image is built from this repository (it becomes
+    `vX.Y.Z`, the Platform Mesh version),
+  - the image's own version if it is built in another repository (bumped when
+    that repository releases),
+  - `0.0.0` if there is no image (chart-only).
+- Dependencies on charts in this repository are `file://` references with
+  version `0.0.0`.
 
 ### values.yaml
 
@@ -95,11 +103,11 @@ Create a separate CRD chart `charts/my-service-crds/` and reference it as a cond
 # In charts/my-service/Chart.yaml
 dependencies:
   - name: common
-    version: 0.15.0
-    repository: oci://ghcr.io/platform-mesh/helm-charts
+    version: 0.0.0
+    repository: file://../common
   - name: my-service-crds
-    version: 0.1.0
-    repository: oci://ghcr.io/platform-mesh/helm-charts
+    version: 0.0.0
+    repository: file://../my-service-crds
     condition: crds.enabled
 ```
 
@@ -115,20 +123,19 @@ task charts:docs                                  # regenerate README from value
 
 **Built from this repository:** add the component to
 [`ocm/components.yaml`](../../ocm/components.yaml) (path, image name, chart).
-CI and the release workflows pick it up from there. Releasing the image is
-`task release -- my-service`, which tags `my-service/vX.Y.Z` and publishes the
-image and the OCM component `github.com/platform-mesh/images/my-service:vX.Y.Z`
-(see [docs/release/process.md](../release/process.md)).
+CI and the release workflows pick it up from there: every Platform Mesh
+release builds the image at the release's version and publishes it together
+with the OCM component `github.com/platform-mesh/images/my-service:X.Y.Z`
+(see [docs/release/process.md](../release/process.md)). The `chart:` entry is
+what tells the tooling to write the release version into the chart's
+`appVersion`.
 
 **Built elsewhere:** the other repository must publish the image and an OCM
 component `github.com/platform-mesh/images/<name>:<version>` to
 `ghcr.io/platform-mesh` (the portal does this today). The chart's `appVersion`
 selects the version; bump it (manually or via Renovate) when a new image is
-released. Nothing is dispatched between repositories anymore.
-
-In both cases the chart's `appVersion` must match an existing image component
-version, otherwise a Platform Mesh release fails with a list of missing
-components.
+released. It must match an existing image component version, otherwise a
+Platform Mesh release fails with a list of missing components.
 
 ## Step 3: OCM Component
 
@@ -136,9 +143,10 @@ Nothing to do for the common case. The release tooling derives from
 `charts/my-service/Chart.yaml`:
 
 ```
-github.com/platform-mesh/my-service:<chart version>
-  ├─ chart → github.com/platform-mesh/helm-charts/my-service:<chart version>
-  └─ image → github.com/platform-mesh/images/my-service:<appVersion>   (omitted when appVersion is 0.0.0)
+github.com/platform-mesh/my-service:X.Y.Z
+  ├─ chart → github.com/platform-mesh/helm-charts/my-service:X.Y.Z
+  └─ image → github.com/platform-mesh/images/my-service:X.Y.Z      (built here)
+                                                       :<appVersion>  (built elsewhere; omitted when 0.0.0)
 ```
 
 If the chart deploys third-party images (like `infra` or `keycloak-operator`),
@@ -152,7 +160,7 @@ aggregate in [`ocm/component-constructor.yaml`](../../ocm/component-constructor.
 ```yaml
       - name: my-service
         componentName: github.com/platform-mesh/my-service
-        version: ${MY_SERVICE_VERSION}      # <chart dir name, upper case, - → _>_VERSION
+        version: ${VERSION}
 ```
 
 The reference `name` is what the PlatformMesh profile uses as `referencePath`
@@ -160,9 +168,9 @@ The reference `name` is what the PlatformMesh profile uses as `referencePath`
 
 ## Step 4: CI
 
-Nothing to set up. [`ci.yml`](../../.github/workflows/ci.yml) lints and tests
-changed charts (`ct lint` also enforces the version bump), and runs the Go
-checks for components listed in `ocm/components.yaml`.
+Nothing to set up. [`verify-component.yml`](../../.github/workflows/verify-component.yml)
+lints and tests changed charts and runs the Go checks for components listed
+in `ocm/components.yaml`.
 
 ## Step 5: Profile / PlatformMesh Resource Configuration
 
@@ -304,9 +312,8 @@ kubectl get pods -n platform-mesh-system | grep my-service
 
 ## Checklist
 
-- [ ] **Chart** under `charts/my-service/` with `version` and `appVersion`, `README.md.gotmpl`, tests, docs generated (`task charts:docs`)
-- [ ] **Component registered** in `ocm/components.yaml` (if built here) and released at least once (`task release -- my-service`)
-- [ ] **`appVersion`** points at an existing `github.com/platform-mesh/images/my-service` version
+- [ ] **Chart** under `charts/my-service/` (`version: 0.0.0`), `README.md.gotmpl`, tests, docs generated (`task charts:docs`)
+- [ ] **Component registered** in `ocm/components.yaml` (if built here), or **`appVersion`** pointing at an existing `github.com/platform-mesh/images/my-service` version (if built elsewhere)
 - [ ] **Aggregate reference** added to `ocm/component-constructor.yaml`
 - [ ] **`ocm/charts/my-service.yaml`** if the chart deviates from the default shape
 - [ ] **Profile entry** in the PlatformMesh default profile with the matching `referencePath`

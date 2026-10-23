@@ -21,8 +21,8 @@ name: images
 # for all components.)
 #
 # No checks run here; the commit passed them as a pull request and in the
-# merge queue (ci.yml). Versioned, immutable images are built by
-# component-release.yml for `<component>/v*` tags.
+# merge queue (verify-*.yml). Versioned, immutable images are built by
+# job-publish.yml for Platform Mesh releases (`v*` tags) and prereleases.
 
 on:
   push:

@@ -23,10 +23,14 @@
 # any release tag is.
 #
 # Sections:
-#   - component versions that changed (chart version / image version per chart)
 #   - third-party versions that changed (ocm/versions.yaml)
+#   - versions of the components built in other repositories that changed
+#     (appVersion of their charts)
 #   - merged pull requests between the two tags, grouped by the part of the
 #     repository they touched
+#
+# Everything built from this repository has the release's version, so there is
+# no per-component version table.
 #
 # Needs the full git history (fetch-depth: 0 in workflows). Uses `gh` only to
 # build links; works without it.
@@ -62,35 +66,31 @@ fi
 echo
 
 # ---------------------------------------------------------------------------
-# Component versions
+# Components from other repositories (portal, iam-ui, ...)
 # ---------------------------------------------------------------------------
 chart_field() { # <ref> <chart> <field>
   git show "$1:charts/$2/Chart.yaml" 2>/dev/null | yq -r ".$3 // \"\"" 2>/dev/null || true
 }
 
-echo "## Components"
-echo
-echo "| Component | Chart | Image |"
-echo "|---|---|---|"
-for chart_yaml in charts/*/Chart.yaml; do
-  name="$(basename "$(dirname "$chart_yaml")")"
-  [[ "$name" == "common" ]] && continue
-  cv="$(chart_field "$tag" "$name" version)"; av="$(chart_field "$tag" "$name" appVersion)"
-  if [[ -n "$prev" ]]; then
-    pcv="$(chart_field "$prev" "$name" version)"; pav="$(chart_field "$prev" "$name" appVersion)"
-  else
-    pcv=""; pav=""
+if [[ -n "$prev" ]]; then
+  inhouse="$(git show "$tag:ocm/components.yaml" | yq '.components[] | select(has("chart")) | .chart' | sed 's#^charts/##')"
+  rows=""
+  for chart_yaml in charts/*/Chart.yaml; do
+    name="$(basename "$(dirname "$chart_yaml")")"
+    grep -qx "$name" <<<"$inhouse" && continue
+    av="$(chart_field "$tag" "$name" appVersion)"; pav="$(chart_field "$prev" "$name" appVersion)"
+    [[ -n "$av" && "$av" != "0.0.0" && "$av" != "$pav" ]] || continue
+    rows+="| $name | ${pav:-–} | **$av** |"$'\n'
+  done
+  if [[ -n "$rows" ]]; then
+    echo "## Components from other repositories"
+    echo
+    echo "| Component | Before | After |"
+    echo "|---|---|---|"
+    printf '%s' "$rows"
+    echo
   fi
-  [[ "$av" == "0.0.0" ]] && av=""; [[ "$pav" == "0.0.0" ]] && pav=""
-  fmt() { # <old> <new>
-    if [[ -z "$2" ]]; then echo "–"
-    elif [[ -z "$1" ]]; then echo "$2 (new)"
-    elif [[ "$1" == "$2" ]]; then echo "$2"
-    else echo "$1 → **$2**"; fi
-  }
-  echo "| $name | $(fmt "$pcv" "$cv") | $(fmt "$pav" "$av") |"
-done
-echo
+fi
 
 # ---------------------------------------------------------------------------
 # Third-party versions
@@ -121,7 +121,8 @@ area_of() { # <path> -> area label
   case "$1" in
     operators/*|services/*) echo "$1" | cut -d/ -f2 ;;
     apis/*|golang-commons/*|subroutines/*) echo "$1" | cut -d/ -f1 ;;
-    charts/*) echo "chart: $(echo "$1" | cut -d/ -f2)" ;;
+    charts/*/*) echo "chart: $(echo "$1" | cut -d/ -f2)" ;;
+    charts/*) echo "repository" ;;
     local-setup/*|production-setup/*) echo "$1" | cut -d/ -f1 ;;
     ocm/*|.github/*|hack/*|Taskfile.yaml|docs/*) echo "repository" ;;
     *) echo "other" ;;

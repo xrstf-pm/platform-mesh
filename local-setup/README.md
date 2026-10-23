@@ -162,15 +162,23 @@ task local-setup:start
 task local-setup:start
 
 # Pull a specific published version from ghcr.io/platform-mesh
-PLATFORM_MESH_VERSION=0.6.0 task local-setup:start
+PLATFORM_MESH_VERSION=0.60.0 task local-setup:start
 
 # Pull a prerelease built from main (see the prerelease workflow's summary for the version)
-PLATFORM_MESH_VERSION=0.7.0-dev.42.g1a2b3c4 task local-setup:start
+PLATFORM_MESH_VERSION=0.61.0-dev.42.g1a2b3c4 task local-setup:start
 ```
 
 When building from the working tree, the charts come from `charts/` as they are
-in your checkout; the component images are the versions pinned by each chart's
-`appVersion`. To test a locally built image, see
+in your checkout. The component images are not built: the charts point at the
+images of the latest Platform Mesh release reachable from your `HEAD`
+(`git tag --merged`), or at `PLATFORM_MESH_IMAGE_VERSION` if set, e.g. a
+prerelease from main:
+
+```sh
+PLATFORM_MESH_IMAGE_VERSION=0.61.0-dev.42.g1a2b3c4 task local-setup:start
+```
+
+To test a locally built image, see
 [Load Custom Images Hook](#load-custom-images-hook) below.
 
 The build-locally path is useful for:
@@ -363,9 +371,10 @@ Create `local-setup/scripts/load-custom-images.sh` — it is already gitignored:
 SCRIPT_DIR=$(dirname "$0")
 
 # Example: replace the operator image with a locally built one instead of pulling from ghcr.io.
-# The tag is read dynamically from the chart so it stays in sync with version bumps.
-OPERATOR_TAG=$(grep '^appVersion:' "$SCRIPT_DIR/../../charts/platform-mesh-operator/Chart.yaml" | awk '{print $2}' | tr -d '"')
-OPERATOR_IMAGE="ghcr.io/platform-mesh/platform-mesh-operator:${OPERATOR_TAG}"
+# The tag is the Platform Mesh version the working-tree build uses for images
+# (the latest release reachable from HEAD, or PLATFORM_MESH_IMAGE_VERSION).
+OPERATOR_TAG="v${PLATFORM_MESH_IMAGE_VERSION:-$(git tag -l 'v[0-9]*' --merged HEAD | sort -V | tail -1 | sed 's/^v//')}"
+OPERATOR_IMAGE="ghcr.io/platform-mesh/platform-mesh/platform-mesh-operator:${OPERATOR_TAG}"
 
 echo "Injecting local operator image as ${OPERATOR_IMAGE}"
 $CONTAINER_RUNTIME tag localhost:5001/platform-mesh-operator:latest "${OPERATOR_IMAGE}"

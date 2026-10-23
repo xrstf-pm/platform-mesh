@@ -49,7 +49,7 @@ permissions: {} # Default-deny at workflow level; the job elevates what it needs
 
 env:
   REGISTRY_TOKEN: ${{ secrets.registryToken || secrets.GITHUB_TOKEN }}
-  # OCM repository the component-release workflow publishes to (org root, the
+  # OCM repository the publish workflow publishes to (org root, the
   # same repository the Platform Mesh aggregate and its consumers use).
   IMAGE_REPO: ${{ format('ghcr.io/{0}', github.repository_owner) }}
   COMPONENT: ${{ inputs.componentName || format('github.com/platform-mesh/images/{0}', github.event.repository.name) }}
