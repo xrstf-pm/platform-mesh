@@ -22,7 +22,7 @@ vars:
   CHARTS:
     sh: "printf '%s' $(ls -d charts/*/ | paste -sd ',' -)"
   CHANGED_CHARTS:
-    sh: "( git diff --name-only main..@ ; git diff --name-only ) | grep '^charts/' | cut -d/ -f1-2 | sort | uniq | paste -sd ',' -"
+    sh: "( git diff --name-only main..@ 2>/dev/null ; git diff --name-only ) | grep '^charts/' | cut -d/ -f1-2 | sort | uniq | paste -sd ',' - || true"
 
 tasks:
   setup:kube-lint:

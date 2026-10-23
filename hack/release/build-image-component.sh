@@ -70,7 +70,9 @@ if "$OCM" get component-version "$OCM_REPO//$name:$VERSION" -o json >/dev/null 2
   exit 1
 fi
 
+# OCM only reads file inputs from below the constructor's directory.
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+cp "$SBOM_DIR/sbom-cyclonedx.json" "$SBOM_DIR/sbom-spdx.json" "$tmp/"
 cat > "$tmp/constructor.yaml" <<EOF
 components:
   - name: "$name"
@@ -97,13 +99,13 @@ components:
         type: sbom
         input:
           type: file
-          path: $(realpath "$SBOM_DIR")/sbom-cyclonedx.json
+          path: sbom-cyclonedx.json
           mediaType: application/vnd.cyclonedx+json
       - name: sbom-spdx
         type: sbom
         input:
           type: file
-          path: $(realpath "$SBOM_DIR")/sbom-spdx.json
+          path: sbom-spdx.json
           mediaType: application/spdx+json
 EOF
 
