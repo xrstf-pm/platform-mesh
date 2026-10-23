@@ -132,6 +132,7 @@ jobs:
         run: cosign sign --yes "${IMAGE_REF}"
         env:
           IMAGE_REF: ${{ steps.build.outputs.imageRef }}
+      - run: mkdir -p sbom # sbom-action does not create the output directory
       - name: Generate CycloneDX SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
