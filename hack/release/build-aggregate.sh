@@ -274,7 +274,7 @@ if [[ "$SKIP_CHARTS" != "true" ]]; then
     fi
     log "packaging and pushing chart $name:$version"
     "$HELM" package "$STAGED/$name" --dependency-update --destination "$tmp" >/dev/null
-    "$HELM" push "$tmp/$name-$version.tgz" "oci://$CHART_REPO" >/dev/null
+    retry 3 "$HELM" push "$tmp/$name-$version.tgz" "oci://$CHART_REPO" >/dev/null
   done < <(jq -c '.[]' <<<"$charts_json")
 fi
 
@@ -292,7 +292,7 @@ while IFS=$'\t' read -r cname cver; do
   fi
   if [[ -n "$MIRROR_FROM" ]] && cv_exists "$MIRROR_FROM" "$cname" "$cver"; then
     log "mirroring $cname:$cver from $MIRROR_FROM"
-    "$OCM" transfer component-version "$MIRROR_FROM//$cname:$cver" "$OCM_REPO" >/dev/null
+    retry 3 "$OCM" transfer component-version "$MIRROR_FROM//$cname:$cver" "$OCM_REPO" >/dev/null
     continue
   fi
   missing+=("$cname:$cver")

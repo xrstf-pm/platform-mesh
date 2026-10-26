@@ -122,5 +122,5 @@ if [[ -n "$SIGNATURE" ]]; then
   "$OCM" sign component-version --signature "$SIGNATURE" "ctf::$tmp/transport.ctf//$name:$VERSION" >/dev/null
 fi
 log "publishing to $OCM_REPO"
-"$OCM" transfer component-version "ctf::$tmp/transport.ctf//$name:$VERSION" "$OCM_REPO" >/dev/null
+retry 3 "$OCM" transfer component-version "ctf::$tmp/transport.ctf//$name:$VERSION" "$OCM_REPO" >/dev/null
 log "done: $name:$VERSION published to $OCM_REPO"

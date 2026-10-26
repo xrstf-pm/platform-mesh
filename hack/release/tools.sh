@@ -24,6 +24,21 @@
 # Set RELEASE_TOOLS_FROM_PATH=true to skip the installation and use whatever
 # is on PATH (for environments without task or network).
 
+# retry <n> <cmd...>: run a command up to n times with a short pause. GHCR
+# occasionally answers "tag: not found" right after a successful upload to a
+# freshly created package; a second attempt succeeds.
+retry() {
+  local attempts="$1" i; shift
+  for ((i = 1; i <= attempts; i++)); do
+    "$@" && return 0
+    if (( i < attempts )); then
+      echo "attempt $i/$attempts failed: $*; retrying in 10s" >&2
+      sleep 10
+    fi
+  done
+  return 1
+}
+
 require_tools() {
   local root tool var path
   root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
