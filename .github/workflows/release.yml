@@ -15,10 +15,9 @@
 name: release
 
 # Releases Platform Mesh. Triggered by pushing a tag `vX.Y.Z` (final) or
-# `vX.Y.Z-rc.N` (release candidate), on main or on a release-X.Y branch; the
-# tagged commit IS the release. job-publish.yml builds and publishes every
-# image, chart and OCM component at that version, then a GitHub release with
-# generated notes is created.
+# `vX.Y.Z-rc.N` (release candidate), on main or on a release-X.Y branch.
+# job-publish.yml builds and publishes every image, chart and OCM component at
+# that version, then a GitHub release with generated notes is created.
 #
 # There is nothing to prepare before tagging: charts carry no versions in git
 # (RFC 015), third-party versions come from ocm/versions.yaml.

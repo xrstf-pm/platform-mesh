@@ -66,6 +66,7 @@ jobs:
           fi
           hack/release/changed-components.sh "$changed" | tee -a "$GITHUB_OUTPUT"
 
+  # this step runs once for each changed component and produces the final image
   image:
     needs: changes
     if: needs.changes.outputs.imageComponents != '[]'

@@ -17,7 +17,7 @@ name: prerelease
 # Publishes the current state of a branch (normally main) as a Platform Mesh
 # prerelease, exactly like release.yml does for a tag, but
 #
-#   - on demand (and optionally on a schedule), NOT for every commit,
+#   - on demand (and optionally on a schedule), not for every commit,
 #   - with the version <next release>-dev.<run number>.g<sha>, e.g.
 #     0.61.0-dev.42.g1a2b3c4 (next release per hack/release/next-version.sh,
 #     i.e. the VERSION file). "dev" sorts below "rc", so semver range queries
