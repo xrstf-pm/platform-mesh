@@ -114,8 +114,13 @@ mirror_external_components() {
             github.com/gardener/*) source="europe-docker.pkg.dev/gardener-project/releases" ;;
         esac
         echo -e "${COL}[$(date '+%H:%M:%S')] $name:$version: copying from $source...${COL_RES}"
-        if ! pod_ocm transfer component-version --recursive "$source//$name:$version" "$LOCAL_OCM_REPO"; then
-            echo -e "${RED}Failed to copy $name:$version${COL_RES}" >&2
+        local err
+        if ! err=$(pod_ocm transfer component-version --recursive "$source//$name:$version" "$LOCAL_OCM_REPO" 2>&1); then
+            echo "$err" | tail -5 >&2
+            echo -e "${RED}Failed to copy $name:$version from $source${COL_RES}" >&2
+            if grep -qE "401|unauthorized|DENIED|denied" <<<"$err"; then
+                echo -e "${RED}  The registry refused anonymous access; the transfer pod has no credentials. Private packages (e.g. in a fork) must be public.${COL_RES}" >&2
+            fi
             case "$name" in
                 github.com/platform-mesh/images/*)
                     if [ "$version" = "$PLATFORM_MESH_IMAGE_VERSION" ]; then
