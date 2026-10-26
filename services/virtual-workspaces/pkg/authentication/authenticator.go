@@ -34,8 +34,8 @@ func New(restCfg *rest.Config) authenticator.Request {
 	cfg := rest.CopyConfig(restCfg)
 
 	// disable cert/key data so that we do not use client certs for authentication
-	cfg.CertData = nil
 	cfg.KeyData = nil
+	cfg.CertData = nil
 
 	client, err := rest.HTTPClientFor(cfg)
 	if err != nil {

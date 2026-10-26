@@ -29,8 +29,8 @@ WORKDIR /workspace
 COPY go.work go.work
 COPY go.work.sum go.work.sum
 COPY apis/ apis/
-COPY golang-commons/ golang-commons/
 COPY subroutines/ subroutines/
+COPY golang-commons/ golang-commons/
 COPY operators/account-operator/ operators/account-operator/
 
 # Drop every workspace module except the ones copied above, so the workspace
