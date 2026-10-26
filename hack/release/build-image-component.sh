@@ -27,6 +27,11 @@
 #   --signature   sign the component with this signature (key from the ocm
 #                 config, see ocm-config.sh)
 #
+# The component is versioned V; the image resource inside it is versioned vV,
+# i.e. exactly the image tag: consumers that cannot use OCM localization (the
+# platform-mesh-operator's own bootstrap, local-setup/kustomize/base/rgd) build
+# the image reference from the resource version.
+#
 # Published versions are immutable: if the component version already exists in
 # --ocm-repo, the script fails. Needs an ocm config with registry credentials.
 
@@ -91,7 +96,7 @@ components:
       - name: image
         type: ociImage
         relation: external
-        version: "$VERSION"
+        version: "v$VERSION"
         access:
           type: ociArtifact
           imageReference: "$IMAGE_REF"
