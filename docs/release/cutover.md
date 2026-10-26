@@ -10,15 +10,20 @@ flip.
 
 | | Question | Options |
 |---|---|---|
-| O1 | Chart OCI namespace | keep `ghcr.io/platform-mesh/helm-charts/<chart>` (the monorepo's `GITHUB_TOKEN` cannot push there; needs the PM Publisher App token or re-linking every chart package to the monorepo) **or** move to `ghcr.io/platform-mesh/platform-mesh/<chart>` (what the new workflows do by default; docs and the OCM chart resources then point at the new location; consumers pulling charts by URL must adapt). Chart dependencies are `file://` references now and no longer care. |
 | O2 | OCM signature name | keep `helm-charts.platform-mesh` (what consumers verify today) **or** switch to `platform-mesh.platform-mesh` (CN of the monorepo's existing cert). A switch is a consumer-visible change like the last one (`ocm.platform-mesh` → `helm-charts.platform-mesh` at 0.4.0-build.516) and needs a migration note |
 | RFC 015 | First unified version | `0.60.0` per the RFC (above platform-mesh-operator 0.59.0). The `VERSION` file says `0.60`. Known wart: `gateway-api-crds` goes from chart version 1.5.1 to 0.60.0 (its `appVersion` keeps the upstream `v1.5.1`). |
 
-Recommendation: O1 move, O2 keep `helm-charts.platform-mesh` (set the repo
-variable `OCM_SIGNATURE_NAME` accordingly and use the helm-charts signing cert).
+Recommendation: O2 keep `helm-charts.platform-mesh` (set the repo variable
+`OCM_SIGNATURE_NAME` accordingly and use the helm-charts signing cert).
+
+Charts keep their location `ghcr.io/platform-mesh/helm-charts/<chart>` and
+images theirs (`ghcr.io/platform-mesh/platform-mesh/<image>`); only the
+repository that publishes them changes. (An earlier draft moved charts next to
+the images; that put chart `0.60.0` and image `v0.60.0` into the same OCI
+repository and was dropped.)
 
 Consumer-visible changes to announce with the first release (`docs/release/migration-0.60.md`,
-to be written at cutover once O1/O2 are decided):
+to be written at cutover once O2 is decided):
 
 - all charts and OCM components carry the Platform Mesh version; version
   constraints on individual charts must be adjusted (e.g. a Flux `HelmRelease`
@@ -28,7 +33,7 @@ to be written at cutover once O1/O2 are decided):
   the aggregate)
 - component images are tagged `ghcr.io/platform-mesh/platform-mesh/<image>:vX.Y.Z`
   (the Platform Mesh version instead of the component's own)
-- O1/O2 as decided
+- O2 as decided
 
 ## 1. Import helm-charts into the monorepo
 
@@ -65,14 +70,23 @@ and `zizmor.yml` (`grep -rn "FORK:" .github/workflows`).
 | variable | `OCM_MIRROR_FROM` | **leave unset** |
 | branch protection | `main` | require the `ci` checks (and `pr-gate`), as for the old per-component workflows |
 
-GHCR package access: the monorepo's `GITHUB_TOKEN` must be able to push to the
-existing packages under `ghcr.io/platform-mesh/component-descriptors/*`
-(created by helm-charts and the old monorepo workflows). Per package: Package
-settings → Manage Actions access → add `platform-mesh/platform-mesh` with
-write. Alternatively give the workflows a GitHub App token. Check with a
-prerelease run (step 5) which packages are affected; the failure is explicit.
-New packages (charts under the new namespace, if O1 = move) are created
-private on first push and must be made public once.
+GHCR package access: the existing packages under
+`ghcr.io/platform-mesh/helm-charts/*` and
+`ghcr.io/platform-mesh/component-descriptors/*` were created by the helm-charts
+repository, and GHCR only lets the creating repository's `GITHUB_TOKEN` push.
+Two ways out:
+
+- **GitHub App token (preferred)**: the old helm-charts `job-ocm.yml` already
+  used the "PM Publisher" app (id `1415820`, secret `PM_PUBLISHER_PRIVATE_KEY`)
+  for exactly this. Add `actions/create-github-app-token` to `job-publish.yml`
+  and use its token for `helm registry login` / `ocm-config.sh` instead of
+  `GITHUB_TOKEN`. One secret, no per-package clicking.
+- Per package: Package settings → Manage Actions access → add
+  `platform-mesh/platform-mesh` with write.
+
+Check with a prerelease run (step 5) which packages are affected; the failure
+is explicit. New packages are created private on first push and must be made
+public once (no API for this; the fork needed ~60 clicks).
 
 ## 4. Component images
 
@@ -119,8 +133,7 @@ In one PR / afternoon:
    workflows" is the template).
 2. Archive `platform-mesh/helm-charts` (read-only). Its tags remain; the
    monorepo carries them as `helm-charts/0.x`.
-3. If O1 = move: update the chart dependency URLs and docs.
-4. Tag `v0.60.0`, then create `release-0.60`
+3. Tag `v0.60.0`, then create `release-0.60`
    and bump `VERSION` to `0.61` on `main`.
 
 ## Rollback

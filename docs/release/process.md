@@ -93,7 +93,7 @@ from the tag:
    ([`hack/release/build-image-component.sh`](../../hack/release/build-image-component.sh)).
 2. **aggregate** – [`hack/release/build-aggregate.sh`](../../hack/release/build-aggregate.sh)
    packages the charts at `X.Y.Z`, pushes them to
-   `ghcr.io/platform-mesh/platform-mesh/<chart>`, builds the OCM graph (chart
+   `ghcr.io/platform-mesh/helm-charts/<chart>` (where they always were), builds the OCM graph (chart
    components, service components, third-party wrappers, aggregate), signs
    the new component versions and publishes them to `ghcr.io/platform-mesh`.
    Every referenced component must exist: the images from step 1, the
@@ -189,7 +189,7 @@ is on `PATH` instead.
 ocm get component-version ghcr.io/platform-mesh//github.com/platform-mesh/platform-mesh:0.61.0 --recursive
 ocm verify component-version --signature platform-mesh.platform-mesh \
   ghcr.io/platform-mesh//github.com/platform-mesh/platform-mesh:0.61.0   # public key in ~/.ocmconfig
-helm pull oci://ghcr.io/platform-mesh/platform-mesh/account-operator --version 0.61.0
+helm pull oci://ghcr.io/platform-mesh/helm-charts/account-operator --version 0.61.0
 cosign verify ghcr.io/platform-mesh/platform-mesh/account-operator:v0.61.0 \
   --certificate-identity-regexp 'https://github.com/platform-mesh/platform-mesh/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
@@ -200,6 +200,7 @@ cosign verify ghcr.io/platform-mesh/platform-mesh/account-operator:v0.61.0 \
 | Where | Name | Purpose |
 |---|---|---|
 | repository secret | `OCM_SIGNING_PRIVATE_KEY`, `OCM_SIGNING_CERT` | RSA key and certificate for OCM signatures. The signature name must equal the certificate's CN. |
+| repository secret | `PM_PUBLISHER_PRIVATE_KEY` (planned) | private key of the "PM Publisher" GitHub App, to push to the `helm-charts/*` packages created by the former helm-charts repository. The fork uses `GITHUB_TOKEN`; see `cutover.md`. |
 | repository variable | `OCM_SIGNATURE_NAME` | signature name, default `platform-mesh.platform-mesh` |
 | repository variable | `OCM_MIRROR_FROM` | test setups only: OCM repository to copy components from other repositories from |
 

@@ -45,7 +45,10 @@
 #   --ocm-repo REPO     OCM repository to publish to and resolve references from
 #                       (default ghcr.io/platform-mesh)
 #   --chart-repo REPO   OCI repository charts are pushed to, without oci://
-#                       (default <ocm-repo>/platform-mesh)
+#                       (default <ocm-repo>/helm-charts, the namespace charts
+#                       have always been published to; images live under
+#                       <ocm-repo>/platform-mesh/, so the two never share a
+#                       repository)
 #   --repo-url URL      git repository URL recorded as source (default from origin)
 #   --commit SHA        git commit recorded as source (default HEAD)
 #   --signature NAME    sign every newly published component version with this
@@ -106,7 +109,7 @@ done
 [[ -n "$VERSION" ]] || { echo "--version is required" >&2; exit 1; }
 IMAGE_VERSION="${IMAGE_VERSION:-$VERSION}"
 IMAGE_VERSION="${IMAGE_VERSION#v}"
-CHART_REPO="${CHART_REPO:-$OCM_REPO/platform-mesh}"
+CHART_REPO="${CHART_REPO:-$OCM_REPO/helm-charts}"
 CHART_REPO="${CHART_REPO#oci://}"
 COMMIT="${COMMIT:-$(git rev-parse HEAD)}"
 if [[ -z "$REPO_URL" ]]; then

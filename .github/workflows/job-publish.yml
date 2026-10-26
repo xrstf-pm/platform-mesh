@@ -353,7 +353,7 @@ jobs:
         run: |
           set -euo pipefail
           for chart in account-operator infra common; do
-            "$HELM" pull "oci://$OCM_REPO/platform-mesh/$chart" --version "$VERSION" --destination /tmp
+            "$HELM" pull "oci://$OCM_REPO/helm-charts/$chart" --version "$VERSION" --destination /tmp
             [ "$chart" = common ] || "$HELM" template "/tmp/$chart-$VERSION.tgz" >/dev/null
             echo "ok: $chart $VERSION"
           done
