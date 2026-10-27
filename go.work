@@ -6,7 +6,6 @@ use (
 	./apis
 	./cmd/jl
 	./cmd/qbrtool
-	./cmd/release
 	./golang-commons
 	./operators/account-operator
 	./operators/backup-operator

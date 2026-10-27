@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
+
+# Copyright The Platform Mesh Authors.
 #
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # lint-image-schema.sh — enforce the common image schema (PR #1980) in first-party charts.
 #
 # Why a source-level check (and not helm lint): the failure mode that breaks air-gap is a
@@ -17,12 +31,12 @@
 #   image: "some/third-party:tag"  # image-schema:allow <reason, e.g. link to issue>
 #
 # Usage: lint-image-schema.sh [CHARTS_DIR]   (default: <repo>/charts)
-#
+
 set -euo pipefail
 
 charts_dir="${1:-}"
 if [ -z "$charts_dir" ]; then
-  charts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/charts"
+  charts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/charts"
 fi
 
 if [ ! -d "$charts_dir" ]; then
