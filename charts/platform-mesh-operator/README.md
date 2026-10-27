@@ -28,9 +28,11 @@ A Helm chart to automate bootstrapping of new environment
 | kcp | object | `{"frontProxyPort":443}` | KCP connectivity configuration (used when ocm.enabled=true). |
 | kcp.frontProxyPort | int | `443` | Internal port of the KCP front-proxy Service. Production Services expose 443; the kind profile uses 8443. |
 | log.level | string | `"info"` | log level. Permissible values: debug, info, warn, error |
-| ocm | object | `{"enabled":false,"installSigningCertificate":true,"profile":"production","version":"0.5.2"}` | When enabled, installs the OCM Repository/Component CRs, the PlatformMesh CR, and the profile ConfigMap alongside the operator. Disable to deploy only the operator binary and supply PlatformMesh resources from a separate GitOps source. |
-| ocm.installSigningCertificate | bool | `true` | Set to false when the OCM component is signed by a different trusted key. |
+| ocm | object | `{"enabled":false,"installSigningCertificate":true,"profile":"production","repository":"ghcr.io/platform-mesh","signatureName":"helm-charts.platform-mesh","version":"0.5.2"}` | When enabled, installs the OCM Repository/Component CRs, the PlatformMesh CR, and the profile ConfigMap alongside the operator. Disable to deploy only the operator binary and supply PlatformMesh resources from a separate GitOps source. |
+| ocm.installSigningCertificate | bool | `true` | Set to false when the OCM component is signed by a different trusted key. Then provide a Secret `ocm-signing-public-cert` with the certificate in the release namespace yourself. |
 | ocm.profile | string | `"production"` | Installation profile. `production` assumes the infrastructure prerequisites already exist. |
+| ocm.repository | string | `"ghcr.io/platform-mesh"` | OCI registry (and optional path) the Platform Mesh OCM components are read from. Point this at a mirror, or at a fork's registry, to install from there. |
+| ocm.signatureName | string | `"helm-charts.platform-mesh"` | Name of the OCM signature the components are verified against. |
 | ocm.version | string | `"0.5.2"` | Platform Mesh OCM component version to reconcile. |
 | operator.leaderElect | bool | `true` |  |
 | remoteInfra.enabled | bool | `false` | Enables reconciliation of PlatformMesh resources on remote clusters |
