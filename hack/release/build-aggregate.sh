@@ -272,7 +272,7 @@ if [[ "$SKIP_CHARTS" != "true" ]]; then
       continue
     fi
     log "packaging and pushing chart $name:$version"
-    "$HELM" package "$STAGED/$name" --dependency-update --destination "$tmp" >/dev/null
+    "$HELM" package "$STAGED/$name" --destination "$tmp" >/dev/null
     retry 3 "$HELM" push "$tmp/$name-$version.tgz" "oci://$CHART_REPO" >/dev/null
   done < <(jq -c '.[]' <<<"$charts_json")
 fi

@@ -33,7 +33,8 @@
 
 set -euo pipefail
 
-cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$ROOT"
 
 dest="${1:?usage: $0 <staging-dir> <version> [<image-version>]}"
 version="${2:?usage: $0 <staging-dir> <version> [<image-version>]}"
@@ -46,7 +47,7 @@ require_tools yq
 rm -rf "$dest"
 mkdir -p "$dest"
 cp -R charts/. "$dest/"
-# Leftovers of local `helm dependency update` runs; rebuilt at packaging time.
+# Leftovers of local `helm dependency update` runs; resolved again below.
 rm -rf "$dest"/*/charts "$dest"/*/Chart.lock "$dest"/*/*.tgz
 
 inhouse="$("$YQ" '.components[] | select(has("chart")) | .chart' ocm/components.yaml | sed 's#^charts/##')"
@@ -62,5 +63,10 @@ for chart_yaml in "$dest"/*/Chart.yaml; do
     "$YQ" -i '(.dependencies[] | select(.repository | test("^file://"))).version = strenv(version)' "$chart_yaml"
   fi
 done
+
+# file:// dependencies now point at the staged copies at $version. Resolve
+# them dependencies-first (Helm copies file:// charts as they are on disk, so
+# a sub-chart's own dependencies must be in place before it is copied).
+"$ROOT/hack/charts/resolve-dependencies.sh" "$dest"
 
 echo "$dest"

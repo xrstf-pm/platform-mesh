@@ -75,7 +75,7 @@ jobs:
         with:
           go-version-file: go.work
           cache: true # zizmor: ignore[cache-poisoning]
-      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Verify (lint, tidy, boilerplate)
@@ -99,7 +99,7 @@ jobs:
         with:
           go-version-file: go.work
           cache: true # zizmor: ignore[cache-poisoning]
-      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Unit tests
@@ -126,7 +126,7 @@ jobs:
         with:
           go-version-file: go.work
           cache: true # zizmor: ignore[cache-poisoning]
-      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Local hostnames used by the kind-based suites
@@ -152,7 +152,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
-      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build image
@@ -184,7 +184,7 @@ jobs:
           bash hack/charts/lint-image-schema.test.sh
           ./hack/charts/lint-image-schema.sh
 
-      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -226,7 +226,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -234,12 +234,21 @@ jobs:
         id: helm
 
       - name: Install helm-unittest
-        run: ${HELM} plugin install https://github.com/helm-unittest/helm-unittest
+        # Helm 4 verifies plugin signatures by default; helm-unittest ships none.
+        run: ${HELM} plugin install https://github.com/helm-unittest/helm-unittest --verify=false
         env:
           HELM: ${{ steps.helm.outputs.path }}
 
+      - name: Log in to ghcr.io (chart dependencies)
+        run: echo "${GITHUB_TOKEN}" | ${HELM} registry login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HELM: ${{ steps.helm.outputs.path }}
+
       - name: Chart unit tests
-        run: ${HELM} dependency update "charts/${CHART}" >/dev/null && ${HELM} unittest "charts/${CHART}"
+        run: |
+          hack/charts/resolve-dependencies.sh
+          ${HELM} unittest "charts/${CHART}"
         env:
           CHART: ${{ matrix.chart }}
           HELM: ${{ steps.helm.outputs.path }}
@@ -275,7 +284,7 @@ jobs:
           go-version-file: go.work
           cache: true # zizmor: ignore[cache-poisoning]
 
-      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+      - uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
