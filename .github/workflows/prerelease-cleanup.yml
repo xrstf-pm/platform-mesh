@@ -39,13 +39,18 @@ on:
 permissions:
   contents: read
 
+# Two deletions at once would race over the same package versions.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
-      packages: write
+      packages: write # delete package versions
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
