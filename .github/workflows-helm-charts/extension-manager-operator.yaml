@@ -1,0 +1,29 @@
+name: Build extension-manager-operator Workflow
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/extension-manager-operator/**'
+      - '.github/workflows/extension-manager-operator.yaml'
+      - '.ocm/component-constructor-chart-only.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    concurrency:
+      group: extension-manager-operator-${{ github.ref }}
+      cancel-in-progress: true
+    uses: ./.github/workflows/pipeline-chart.yml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      chartFolder: charts
+      chartName: extension-manager-operator
+      componentConstructorFile: .ocm/component-constructor-chart-only.yaml
+      chartOnly: true
+    secrets: inherit
+

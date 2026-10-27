@@ -1,0 +1,60 @@
+components:
+  - name: "${COMPONENT_NAME}"
+    version: "${VERSION}"
+    provider:
+      name: The Platform Mesh Team
+    componentReferences:
+      - name: chart
+        componentName: "github.com/platform-mesh/helm-charts/${CHART_NAME}"
+        version: "${VERSION}"
+      - name: image
+        componentName: "github.com/platform-mesh/images/${IMAGE_COMPONENT_NAME}"
+        version: "${VERSION}"
+
+  - name: "github.com/platform-mesh/images/${IMAGE_COMPONENT_NAME}"
+    version: "${VERSION}"
+    provider:
+      name: The Platform Mesh Team
+    resources:
+      - name: keycloak-image
+        type: ociImage
+        relation: external
+        version: "v26.7.2"
+        access:
+          type: ociArtifact
+          imageReference: "ghcr.io/platform-mesh/custom-images/keycloak:v26.7.2@sha256:5feb71bdf548ee2f7ff33ba2eba082a94de5c16d1a50de8bca71ab78a89c986b"
+      - name: busybox-image
+        type: ociImage
+        relation: external
+        version: "1.37"
+        access:
+          type: ociArtifact
+          imageReference: "docker.io/library/busybox:1.37"
+      - name: postgres-image
+        type: ociImage
+        relation: external
+        version: "18.3"
+        access:
+          type: ociArtifact
+          imageReference: "ghcr.io/cloudnative-pg/postgresql:18.3"
+      - name: dex-image
+        type: ociImage
+        relation: external
+        version: "v2.42.0"
+        access:
+          type: ociArtifact
+          imageReference: "ghcr.io/dexidp/dex:v2.42.0@sha256:1b4a6eee8550240b0faedad04d984ca939513650e1d9bd423502c67355e3822f"
+      - name: etcd-wrapper-image
+        type: ociImage
+        relation: external
+        version: "v0.6.2"
+        access:
+          type: ociArtifact
+          imageReference: "europe-docker.pkg.dev/gardener-project/public/gardener/etcd-wrapper:v0.6.2@sha256:3992f1aedaae733acdd5794ba02cf1beb311c7a24269accd790885cecacdd3f9"
+      - name: etcdbrctl-image
+        type: ociImage
+        relation: external
+        version: "v0.41.2"
+        access:
+          type: ociArtifact
+          imageReference: "europe-docker.pkg.dev/gardener-project/public/gardener/etcdbrctl:v0.41.2@sha256:b21f0d7aeaa275bad9bf616fba9ae29092ac39a391a88b2659eba5981b4650a1"

@@ -1,0 +1,154 @@
+name: Update chart parameters
+
+on:
+  workflow_dispatch:
+    inputs:
+      chart:
+        description: 'The name of the helm chart'
+        required: true
+        default: ''
+      appVersion:
+        description: 'The version tag of the docker image'
+        required: true
+        default: '0.0.0'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Serialize runs per chart so that back-to-back dispatches cannot race each other while opening and closing bump PRs.
+concurrency:
+  group: update-chart-parameters-${{ inputs.chart }}
+  cancel-in-progress: false
+
+jobs:
+  version-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: app-token
+        with:
+          app-id: "1415820"
+          private-key: ${{ secrets.PM_PUBLISHER_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        id: approver-app-token
+        with:
+          app-id: "4247305"
+          private-key: ${{ secrets.PM_APPROVER_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+      - name: Setup yq@latest
+        run: |
+          if ! command -v yq &>/dev/null
+          then
+            mkdir -p /home/runner/.local/bin
+            wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /home/runner/.local/bin/yq &&\
+              chmod +x /home/runner/.local/bin/yq
+          fi
+      - name: Configure GIT
+        run: |
+          git config --global user.name "Platform Mesh Publisher[bot]"
+          git config --global user.email "platformmesh@gmail.com"
+      - name: Validate inputs
+        env:
+          INPUT_CHART: ${{ inputs.chart }}
+          INPUT_APP_VERSION: ${{ inputs.appVersion }}
+        run: |
+          if ! [[ "${INPUT_CHART}" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            echo "::error::Invalid chart name"
+            exit 1
+          fi
+          if ! [[ "${INPUT_APP_VERSION}" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+            echo "::error::Invalid appVersion format"
+            exit 1
+          fi
+      - name: Update appVersion in Chart.yaml
+        id: bump
+        env:
+          INPUT_CHART: ${{ inputs.chart }}
+          INPUT_APP_VERSION: ${{ inputs.appVersion }}
+        run: |
+          set -euo pipefail
+          chart_file="charts/${INPUT_CHART}/Chart.yaml"
+          bash hack/bump-chart-version.sh "$chart_file" "${INPUT_APP_VERSION}"
+
+          if git diff --quiet -- "$chart_file"; then
+            echo "Chart.yaml unchanged; nothing to commit"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          new_chart_version=$(yq '.version' "$chart_file")
+          new_app_version=$(yq '.appVersion' "$chart_file" | tr -d '"')
+          branch="bump/${INPUT_CHART}-${new_app_version}--${new_chart_version}"
+          git checkout -b "$branch"
+          git add "$chart_file"
+          git commit -s -m "Set $new_chart_version / $new_app_version in $chart_file"
+          {
+            echo "changed=true"
+            echo "branch=$branch"
+            echo "title=Set $new_chart_version / $new_app_version in $chart_file"
+          } >> "$GITHUB_OUTPUT"
+      - name: Open PR
+        id: pr
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          # Push and open the PR as the PM Publisher app so that PR-triggered
+          # workflows run without a maintainer approval prompt.
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BRANCH: ${{ steps.bump.outputs.branch }}
+          TITLE: ${{ steps.bump.outputs.title }}
+        run: |
+          # Bot-owned, disposable bump branch: a plain force push is safe and
+          # avoids the "stale info" rejection from --force-with-lease, which
+          # needs a remote-tracking ref this fresh checkout never fetched.
+          git push --force origin "$BRANCH"
+          # Reuse an existing PR for this branch only if one is still open;
+          # closed PRs are ignored so re-running the workflow after a manual
+          # close creates a fresh PR off current main.
+          url=$(gh pr list --head "$BRANCH" --state open --json url --jq '.[0].url')
+          if [ -z "$url" ]; then
+            # Create the PR and mark it for auto-merge.
+            url=$(gh pr create --base main --head "$BRANCH" --title "$TITLE" --body "Automated chart bump.")
+            gh pr merge "$url" --auto
+          else
+            echo "Open PR already exists for $BRANCH; skipping create."
+          fi
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+      - name: Approve PR
+        if: steps.pr.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ steps.approver-app-token.outputs.token }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          gh pr review "$PR_URL" --approve
+      - name: Close superseded PRs
+        if: steps.pr.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INPUT_CHART: ${{ inputs.chart }}
+          BRANCH: ${{ steps.bump.outputs.branch }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          set -euo pipefail
+          # Older bump PRs for the same chart were computed off the same main
+          # and are dead once any of them merges. Match on the exact title
+          # suffix rather than the branch prefix, because chart names overlap
+          # (e.g. security-operator vs. security-operator-crds).
+          gh pr list --state open --author "app/platform-mesh-publisher" \
+            --json number,title,headRefName --limit 100 \
+          | jq -r --arg chart "$INPUT_CHART" --arg branch "$BRANCH" '
+              .[]
+              | select(.headRefName | startswith("bump/"))
+              | select(.title | endswith(" in charts/\($chart)/Chart.yaml"))
+              | select(.headRefName != $branch)
+              | .number' \
+          | while read -r number; do
+              echo "Closing #$number, superseded by $PR_URL"
+              gh pr close "$number" --delete-branch --comment "Superseded by $PR_URL."
+            done

@@ -1,0 +1,29 @@
+name: Build virtual-workspaces Workflow
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/virtual-workspaces/**'
+      - '.github/workflows/virtual-workspaces.yaml'
+      - '.ocm/component-constructor-chart-only.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline:
+    concurrency:
+      group: virtual-workspaces-${{ github.ref }}
+      cancel-in-progress: true
+    uses: ./.github/workflows/pipeline-chart.yml
+    permissions:
+      contents: write
+      packages: write
+    with:
+      chartFolder: charts
+      chartName: virtual-workspaces
+      componentConstructorFile: .ocm/component-constructor-chart-only.yaml
+      chartOnly: true
+    secrets: inherit
+
