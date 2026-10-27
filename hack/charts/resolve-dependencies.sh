@@ -14,9 +14,10 @@
 #
 # Third-party dependencies are pulled from their registries, so this needs
 # network access. Nothing it writes (charts/*/charts/, Chart.lock) is tracked.
-# --skip-refresh: no dependency comes from a classic chart repository, and
-# refreshing the configured repo indexes (bitnami's is huge) costs several
-# seconds per chart.
+# `helm dependency update` refreshes every configured repository index first
+# (bitnami's alone costs seconds), per chart. Instead the few classic (http)
+# repositories charts depend on are fetched once up front, and the updates
+# run with --skip-refresh.
 
 set -euo pipefail
 
@@ -33,6 +34,11 @@ for chart_yaml in "$dir"/*/Chart.yaml; do
   name="$("$YQ" -r '.name' "$chart_yaml")"
   path[$name]="$(dirname "$chart_yaml")"
   deps[$name]="$("$YQ" -r '.dependencies[]? | select(.repository | test("^file://")) | .name' "$chart_yaml" | tr '\n' ' ')"
+done
+
+# Classic chart repositories (OCI and file:// need no index).
+for repo in $("$YQ" -r '.dependencies[]? | select(.repository | test("^https?://")) | .repository' "$dir"/*/Chart.yaml | sort -u); do
+  "$HELM" repo add --force-update "dep-$(echo -n "$repo" | sha256sum | cut -c1-12)" "$repo" >/dev/null
 done
 
 declare -A done
