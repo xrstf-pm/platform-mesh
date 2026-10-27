@@ -10,7 +10,13 @@ ocm:
   profile: production
   # -- Platform Mesh OCM component version to reconcile.
   version: "0.5.2"
-  # -- Set to false when the OCM component is signed by a different trusted key.
+  # -- OCI registry (and optional path) the Platform Mesh OCM components are read from. Point this
+  # at a mirror, or at a fork's registry, to install from there.
+  repository: ghcr.io/platform-mesh
+  # -- Name of the OCM signature the components are verified against.
+  signatureName: helm-charts.platform-mesh
+  # -- Set to false when the OCM component is signed by a different trusted key. Then provide a
+  # Secret `ocm-signing-public-cert` with the certificate in the release namespace yourself.
   installSigningCertificate: true
 
 # -- Gateway/exposure configuration (used when ocm.enabled=true).

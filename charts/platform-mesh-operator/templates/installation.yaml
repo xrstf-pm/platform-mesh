@@ -10,7 +10,7 @@ metadata:
   namespace: {{ .Release.Namespace }}
 spec:
   repositorySpec:
-    baseUrl: ghcr.io/platform-mesh
+    baseUrl: {{ .Values.ocm.repository | quote }}
     type: OCIRegistry
   interval: 1m
 ---
@@ -26,7 +26,7 @@ spec:
   semver: {{ .Values.ocm.version | quote }}
   interval: 1m
   verify:
-    - signature: helm-charts.platform-mesh
+    - signature: {{ .Values.ocm.signatureName | quote }}
       secretRef:
         name: ocm-signing-public-cert
   ocmConfig:

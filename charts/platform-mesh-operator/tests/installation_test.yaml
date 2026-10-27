@@ -22,6 +22,34 @@ tests:
           path: spec.exposure.port
           value: 8443
         documentIndex: 3
+      - equal:
+          path: spec.repositorySpec.baseUrl
+          value: ghcr.io/platform-mesh
+        documentIndex: 0
+      - equal:
+          path: spec.verify[0].signature
+          value: helm-charts.platform-mesh
+        documentIndex: 1
+
+  - it: reads the components from another registry
+    template: installation.yaml
+    set:
+      ocm:
+        enabled: true
+        version: 26.10.0
+        repository: registry.example.com/mirror/platform-mesh
+        signatureName: mirror.example.com
+      gateway:
+        baseDomain: platform.example.com
+    asserts:
+      - equal:
+          path: spec.repositorySpec.baseUrl
+          value: registry.example.com/mirror/platform-mesh
+        documentIndex: 0
+      - equal:
+          path: spec.verify[0].signature
+          value: mirror.example.com
+        documentIndex: 1
   - it: bundles the default profile
     template: installation-profile.yaml
     set:
