@@ -41,11 +41,20 @@ jobs:
   trivy-scan:
     runs-on: ubuntu-latest
     permissions:
+      contents: read # Needed for actions/checkout
+      packages: read # Needed to pull the image to scan (private packages)
       security-events: write # Needed to upload Trivy SARIF to code scanning
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+
+      # Images may be private (every new GHCR package starts out private).
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0

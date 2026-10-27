@@ -1,9 +1,0 @@
-dependencies:
-- name: common
-  repository: oci://ghcr.io/platform-mesh/helm-charts
-  version: 0.16.0
-- name: platform-mesh-operator-crds
-  repository: file://../platform-mesh-operator-crds
-  version: 0.13.0
-digest: sha256:075a6471a1fc1275690cbeedd969882aede999cdcf0a6f6935e9a0d143ec550b
-generated: "2026-10-20T12:52:51.812734+02:00"
