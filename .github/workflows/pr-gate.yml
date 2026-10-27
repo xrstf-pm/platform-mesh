@@ -14,7 +14,9 @@
 
 name: pr-gate
 
-# Auto-merge gate for pull requests and merge queue.
+# Auto-merge gate for pull requests and merge queue. This allows for the repository
+# to only have one single required job configured instead of having to maintain
+# per-repository configuration on admin-level.
 
 on:
   merge_group:

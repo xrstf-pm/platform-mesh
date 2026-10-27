@@ -1,0 +1,9 @@
+# Copyright The Platform Mesh Authors.
+# SPDX-License-Identifier: Apache-2.0
+#
+# OCM settings for charts/platform-mesh-prerequisites. See ocm/charts/README.md.
+#
+# The chart is installed with Helm before anything OCM-related exists in the
+# cluster (installation/README.md), so it is only pushed to the chart registry
+# and gets no OCM component. Its appVersion is informational.
+publish: false
